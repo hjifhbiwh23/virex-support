@@ -322,7 +322,7 @@ async def scam(ctx):
 
     # DIREKTER BILDLINK
     embed.set_image(
-        url="https://imgur.com/a/67JXQrT"
+        url="https://i.imgur.com/t1JeHvA.png"
     )
 
     embed.set_footer(text="Virex Team")
