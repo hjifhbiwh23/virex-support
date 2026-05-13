@@ -290,7 +290,7 @@ async def on_command_error(ctx, error):
         print(f"[ERROR] {error}")
 
 
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
+bot = commands.Bot(command_prefix="$", intents=discord.Intents.default())
 
 @bot.command()
 async def scam(ctx):
