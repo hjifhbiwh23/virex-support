@@ -290,6 +290,38 @@ async def on_command_error(ctx, error):
         print(f"[ERROR] {error}")
 
 
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
+
+@bot.command()
+async def scam(ctx):
+
+    embed = discord.Embed(
+        title="🚨 SCAM WARNING – PLEASE READ! 🚨",
+        description=(
+            "We've had reports of people sending DMs claiming that "
+            "'Virex is a scam' or 'detected'.\n\n"
+            
+            "⚠️ This is happening across multiple servers.\n\n"
+
+            "👉 What you should do:\n"
+            "🚫 Do NOT buy anything from them\n"
+            "🔒 Block the user\n"
+            "📸 Take screenshots\n"
+            "🎟️ Open a support ticket"
+        ),
+        color=0x6f2cff
+    )
+
+    # HIER DEIN BILD LINK
+    embed.set_image(
+        url="https://imgur.com/a/67JXQrT"
+    )
+
+    await ctx.send(
+        content="@everyone",
+        embed=embed
+    )
+
 # ─── START ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import os
