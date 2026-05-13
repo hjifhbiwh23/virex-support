@@ -158,7 +158,7 @@ async def tempvsperm(ctx):
     )
     embed.add_field(
         name="❓ Still unsure?",
-        value="Open a ticket in <#TICKET_CHANNEL_ID> for personal advice.",
+        value="Open a ticket in <#1502194775695167500> for personal advice.",
         inline=False
     )
     embed.set_footer(text="Virex Team")
