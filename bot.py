@@ -5,8 +5,8 @@ import asyncio
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 PREFIX = "$"
 SILENT_PREFIX = "*"          # Messages starting with * are deleted and re-sent by the bot
-BAN_REQUEST_CHANNEL_ID = 0   # ← Replace with your channel ID (int)
-STAFF_ROLE_NAME = "t staff"  # ← Minimum role for all commands (case-insensitive)
+BAN_REQUEST_CHANNEL_ID = 1504101352475725945   # ← Replace with your channel ID (int)
+STAFF_ROLE_NAME = "T Staff"  # ← Minimum role for all commands (case-insensitive)
 
 # ─── BOT SETUP ────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
