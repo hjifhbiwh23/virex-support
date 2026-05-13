@@ -79,7 +79,7 @@ async def manual(ctx):
     embed.add_field(
         name="💰 Perm Guide Assistance",
         value=(
-            "For **$20** you can hire a Staff member *(NOT Trial Staff)* to perform "
+            "For **€20** you can hire a Staff member *(NOT Trial Staff)* to perform "
             "the Perm Guide for you via **AnyDesk**.\n\n"
             "Ideal for those who don't feel confident enough to run the guide themselves. "
             "However, the guide is simple enough for most people."
