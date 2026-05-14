@@ -1,1 +1,2 @@
+audioop-lts==0.2.1
 discord.py[voice]==2.3.2

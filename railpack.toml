@@ -1,0 +1,2 @@
+[phases.setup]
+aptPkgs = ["libopus-dev", "libffi-dev", "libsodium-dev", "python3-dev", "gcc"]
