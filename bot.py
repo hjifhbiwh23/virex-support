@@ -1,6 +1,6 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
+from discord import app_commands
 import asyncio
 import os
 
@@ -54,6 +54,12 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Game(name="virex.gg | $manual")
     )
+    # Sync slash commands
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} slash command(s)")
+    except Exception as e:
+        print(f"❌ Failed to sync commands: {e}")
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -252,7 +258,7 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
         user_display = f"{target_user} (`{user_id}`)"
         avatar = target_user.display_avatar.url
 
-    except:
+    except Exception:
         user_display = f"Unknown User (`{user_id}`)"
         avatar = None
 
@@ -323,7 +329,6 @@ async def scam(ctx):
         color=0x6f2cff
     )
 
-    # DIREKTER BILDLINK
     embed.set_image(
         url="https://i.imgur.com/t1JeHvA.png"
     )
@@ -335,10 +340,16 @@ async def scam(ctx):
         embed=embed
     )
 
-@bot.command()
+# $anydesk — FIX: added staff_check
+@bot.command(name="anydesk")
 async def anydesk(ctx):
+    if not await staff_check(ctx):
+        return
+
+    await ctx.message.delete()
+
     embed = discord.Embed(
-        title="AnyDesk Setup Guide",
+        title="🖥️ AnyDesk Setup Guide",
         description=(
             "**Step 1: Download AnyDesk**\n"
             "[Click here and install.](https://anydesk.com/en/downloads)\n\n"
@@ -352,25 +363,41 @@ async def anydesk(ctx):
         color=0x2F3136
     )
 
+    embed.set_footer(text="Virex Team")
+
     await ctx.send(embed=embed)
 
 
-
-
-
+# ─── APPROVE VIEW ─────────────────────────────────────────────────────────────
+# FIX: removed timeout=None (not persistent across restarts without extra setup)
 class ApproveView(discord.ui.View):
-    def __init__(self, link, author):
-        super().__init__(timeout=None)
+    def __init__(self, link: str, author: discord.User):
+        super().__init__(timeout=300)  # 5 minute timeout
         self.link = link
         self.author = author
 
-    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.green)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        # FIX: only staff can approve
+        if not has_staff_role(interaction.user):
+            await interaction.response.send_message(
+                "❌ You don't have permission to approve posts.",
+                ephemeral=True
+            )
+            return
 
         post_channel = bot.get_channel(POST_CHANNEL_ID)
 
+        if not post_channel:
+            await interaction.response.send_message(
+                "❌ Post channel not found.",
+                ephemeral=True
+            )
+            return
+
         embed = discord.Embed(
-            title="New Video Posted",
+            title="🎬 New Video Posted",
             description=(
                 f"{self.link}\n\n"
                 "Make sure to like and comment on the video.\n"
@@ -383,34 +410,63 @@ class ApproveView(discord.ui.View):
 
         await post_channel.send(embed=embed)
 
+        # Disable buttons after approval
+        for child in self.children:
+            child.disabled = True
+        await interaction.message.edit(view=self)
+
         await interaction.response.send_message(
-            "Post approved and sent.",
+            "✅ Post approved and sent.",
             ephemeral=True
         )
 
-    @discord.ui.button(label="Deny", style=discord.ButtonStyle.red)
+    @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.red)
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
 
+        # FIX: only staff can deny
+        if not has_staff_role(interaction.user):
+            await interaction.response.send_message(
+                "❌ You don't have permission to deny posts.",
+                ephemeral=True
+            )
+            return
+
+        # Disable buttons after denial
+        for child in self.children:
+            child.disabled = True
+        await interaction.message.edit(view=self)
+
         await interaction.response.send_message(
-            "Post denied.",
+            "🚫 Post denied.",
             ephemeral=True
         )
 
 
+# ─── SLASH COMMANDS ───────────────────────────────────────────────────────────
+# FIX: added missing app_commands import + proper decorator
 @bot.tree.command(name="post", description="Submit a video for approval")
-@app_commands.describe(link="Video link")
+@app_commands.describe(link="Video link to submit")
 async def post(interaction: discord.Interaction, link: str):
 
     approve_channel = bot.get_channel(APPROVE_CHANNEL_ID)
 
+    if not approve_channel:
+        await interaction.response.send_message(
+            "❌ Approval channel not found. Contact an admin.",
+            ephemeral=True
+        )
+        return
+
     embed = discord.Embed(
-        title="New Post Request",
+        title="📬 New Post Request",
         description=(
-            f"User: {interaction.user.mention}\n"
-            f"Link: {link}"
+            f"**User:** {interaction.user.mention}\n"
+            f"**Link:** {link}"
         ),
         color=0xffcc00
     )
+
+    embed.set_footer(text=f"Submitted by {interaction.user}")
 
     await approve_channel.send(
         embed=embed,
@@ -418,7 +474,7 @@ async def post(interaction: discord.Interaction, link: str):
     )
 
     await interaction.response.send_message(
-        "Your post has been sent for approval.",
+        "✅ Your post has been sent for approval.",
         ephemeral=True
     )
 
