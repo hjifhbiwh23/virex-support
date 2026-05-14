@@ -9,6 +9,8 @@ SILENT_PREFIX = "*"
 
 BAN_REQUEST_CHANNEL_ID = 1504101352475725945
 STAFF_ROLE_NAME = "T Staff"
+APPROVE_CHANNEL_ID = 1504531328731709540
+POST_CHANNEL_ID = 1502194708993146921
 
 # ─── BOT SETUP ────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
@@ -350,6 +352,75 @@ async def anydesk(ctx):
     )
 
     await ctx.send(embed=embed)
+
+
+
+
+
+class ApproveView(discord.ui.View):
+    def __init__(self, link, author):
+        super().__init__(timeout=None)
+        self.link = link
+        self.author = author
+
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        post_channel = bot.get_channel(POST_CHANNEL_ID)
+
+        embed = discord.Embed(
+            title="New Video Posted",
+            description=(
+                f"{self.link}\n\n"
+                "Make sure to like and comment on the video.\n"
+                "Subscribe for more content."
+            ),
+            color=0x2F3136
+        )
+
+        embed.set_footer(text=f"Posted by {self.author}")
+
+        await post_channel.send(embed=embed)
+
+        await interaction.response.send_message(
+            "Post approved and sent.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.red)
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        await interaction.response.send_message(
+            "Post denied.",
+            ephemeral=True
+        )
+
+
+@bot.tree.command(name="post", description="Submit a video for approval")
+@app_commands.describe(link="Video link")
+async def post(interaction: discord.Interaction, link: str):
+
+    approve_channel = bot.get_channel(APPROVE_CHANNEL_ID)
+
+    embed = discord.Embed(
+        title="New Post Request",
+        description=(
+            f"User: {interaction.user.mention}\n"
+            f"Link: {link}"
+        ),
+        color=0xffcc00
+    )
+
+    await approve_channel.send(
+        embed=embed,
+        view=ApproveView(link, interaction.user)
+    )
+
+    await interaction.response.send_message(
+        "Your post has been sent for approval.",
+        ephemeral=True
+    )
+
 
 # ─── ERRORS ───────────────────────────────────────────────────────────────────
 @bot.event
