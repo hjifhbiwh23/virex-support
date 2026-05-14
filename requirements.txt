@@ -1,3 +1,1 @@
-discord.py==2.3.2
-audioop-lts
-discord.py[voice]
+discord.py[voice]==2.3.2
