@@ -332,6 +332,25 @@ async def scam(ctx):
         embed=embed
     )
 
+@bot.command()
+async def anydesk(ctx):
+    embed = discord.Embed(
+        title="AnyDesk Setup Guide",
+        description=(
+            "**Step 1: Download AnyDesk**\n"
+            "[Click here and install.](https://anydesk.com/en/downloads)\n\n"
+            "**Step 2: Run AnyDesk**\n"
+            "Open the .exe file, sync date & time if errors.\n\n"
+            "**Step 3: Provide Your ID**\n"
+            "Copy your AnyDesk ID into your Discord ticket.\n\n"
+            "**Step 4: Grant Full Permissions**\n"
+            "Wait for staff to connect, then grant full access."
+        ),
+        color=0x2F3136
+    )
+
+    await ctx.send(embed=embed)
+
 # ─── ERRORS ───────────────────────────────────────────────────────────────────
 @bot.event
 async def on_command_error(ctx, error):
