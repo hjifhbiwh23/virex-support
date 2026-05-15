@@ -373,7 +373,7 @@ class ApproveView(discord.ui.View):
 
         embed.set_footer(text=f"Posted by {self.author}")
 
-        await post_channel.send(embed=embed)
+        await post_channel.send(content="@everyone", embed=embed)
 
         for child in self.children:
             child.disabled = True
