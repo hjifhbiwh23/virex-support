@@ -13,6 +13,10 @@ STAFF_ROLE_NAME = "T Staff"
 APPROVE_CHANNEL_ID = 1504531328731709540
 POST_CHANNEL_ID = 1502194708993146921
 
+# ─── NEU: Changelog Konfiguration ────────────────────────────────────────────
+CHANGELOG_CHANNEL_ID = 1504869572082274345  # <-- HIER deine Changelog-Channel-ID eintragen
+CUSTOMER_ROLE_NAME = "customer"              # <-- Rollenname anpassen falls nötig
+
 # ─── BOT SETUP ────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
 intents.message_content = True
@@ -54,7 +58,6 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Game(name="virex.gg | $manual")
     )
-    # Sync slash commands
     try:
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} slash command(s)")
@@ -66,9 +69,7 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    # Ghost speak system
     if message.content.startswith(SILENT_PREFIX):
-
         if not has_staff_role(message.author):
             return
 
@@ -88,7 +89,6 @@ async def on_message(message: discord.Message):
 
 # ─── COMMANDS ─────────────────────────────────────────────────────────────────
 
-# $manual
 @bot.command(name="manual")
 async def manual(ctx):
     if not await staff_check(ctx):
@@ -120,7 +120,6 @@ async def manual(ctx):
 
     await ctx.send(embed=embed)
 
-# $activate
 @bot.command(name="activate")
 async def activate(ctx):
     if not await staff_check(ctx):
@@ -154,7 +153,6 @@ async def activate(ctx):
 
     await ctx.send(embed=embed)
 
-# $tempvsperm
 @bot.command(name="tempvsperm")
 async def tempvsperm(ctx):
     if not await staff_check(ctx):
@@ -191,7 +189,6 @@ async def tempvsperm(ctx):
 
     await ctx.send(embed=embed)
 
-# $proof
 @bot.command(name="proof")
 async def proof(ctx):
     if not await staff_check(ctx):
@@ -233,7 +230,6 @@ async def proof(ctx):
 
     await ctx.send(embed=embed)
 
-# $ban
 @bot.command(name="ban")
 async def ban_request(ctx, user_id: str = None, *, reason: str = None):
 
@@ -243,13 +239,11 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
     await ctx.message.delete()
 
     if not user_id or not reason:
-
         embed = discord.Embed(
             title="❌ Incorrect Usage",
             description="Usage: `$ban <user_id> <reason>`",
             color=0xFF4444
         )
-
         await ctx.send(embed=embed, delete_after=5)
         return
 
@@ -257,7 +251,6 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
         target_user = await bot.fetch_user(int(user_id))
         user_display = f"{target_user} (`{user_id}`)"
         avatar = target_user.display_avatar.url
-
     except Exception:
         user_display = f"Unknown User (`{user_id}`)"
         avatar = None
@@ -267,23 +260,9 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
         color=0xFF0000
     )
 
-    embed.add_field(
-        name="👤 User",
-        value=user_display,
-        inline=False
-    )
-
-    embed.add_field(
-        name="🛡️ Requested By",
-        value=f"{ctx.author}",
-        inline=False
-    )
-
-    embed.add_field(
-        name="📝 Reason",
-        value=reason,
-        inline=False
-    )
+    embed.add_field(name="👤 User", value=user_display, inline=False)
+    embed.add_field(name="🛡️ Requested By", value=f"{ctx.author}", inline=False)
+    embed.add_field(name="📝 Reason", value=reason, inline=False)
 
     if avatar:
         embed.set_thumbnail(url=avatar)
@@ -294,16 +273,13 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
 
     if ban_channel:
         await ban_channel.send(embed=embed)
-
         confirm = discord.Embed(
             title="✅ Ban Request Sent",
             description=f"Request sent to {ban_channel.mention}",
             color=0x00FF00
         )
-
         await ctx.send(embed=confirm, delete_after=5)
 
-# $scam
 @bot.command(name="scam")
 async def scam(ctx):
 
@@ -317,9 +293,7 @@ async def scam(ctx):
         description=(
             "We've had reports of people sending DMs claiming that "
             "**'Virex is a scam'** or **'detected'**.\n\n"
-
             "⚠️ This is happening across multiple servers.\n\n"
-
             "👉 What you should do:\n"
             "🚫 Do NOT buy anything from them\n"
             "🔒 Block the user\n"
@@ -329,18 +303,11 @@ async def scam(ctx):
         color=0x6f2cff
     )
 
-    embed.set_image(
-        url="https://i.imgur.com/t1JeHvA.png"
-    )
-
+    embed.set_image(url="https://i.imgur.com/t1JeHvA.png")
     embed.set_footer(text="Virex Team")
 
-    await ctx.send(
-        content="@everyone @here",
-        embed=embed
-    )
+    await ctx.send(content="@everyone @here", embed=embed)
 
-# $anydesk — FIX: added staff_check
 @bot.command(name="anydesk")
 async def anydesk(ctx):
     if not await staff_check(ctx):
@@ -369,17 +336,15 @@ async def anydesk(ctx):
 
 
 # ─── APPROVE VIEW ─────────────────────────────────────────────────────────────
-# FIX: removed timeout=None (not persistent across restarts without extra setup)
 class ApproveView(discord.ui.View):
     def __init__(self, link: str, author: discord.User):
-        super().__init__(timeout=300)  # 5 minute timeout
+        super().__init__(timeout=300)
         self.link = link
         self.author = author
 
     @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.green)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        # FIX: only staff can approve
         if not has_staff_role(interaction.user):
             await interaction.response.send_message(
                 "❌ You don't have permission to approve posts.",
@@ -410,7 +375,6 @@ class ApproveView(discord.ui.View):
 
         await post_channel.send(embed=embed)
 
-        # Disable buttons after approval
         for child in self.children:
             child.disabled = True
         await interaction.message.edit(view=self)
@@ -423,7 +387,6 @@ class ApproveView(discord.ui.View):
     @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.red)
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        # FIX: only staff can deny
         if not has_staff_role(interaction.user):
             await interaction.response.send_message(
                 "❌ You don't have permission to deny posts.",
@@ -431,7 +394,6 @@ class ApproveView(discord.ui.View):
             )
             return
 
-        # Disable buttons after denial
         for child in self.children:
             child.disabled = True
         await interaction.message.edit(view=self)
@@ -443,10 +405,19 @@ class ApproveView(discord.ui.View):
 
 
 # ─── SLASH COMMANDS ───────────────────────────────────────────────────────────
-# FIX: added missing app_commands import + proper decorator
+
+# /post — NUR für Staff (FIX)
 @bot.tree.command(name="post", description="Submit a video for approval")
 @app_commands.describe(link="Video link to submit")
 async def post(interaction: discord.Interaction, link: str):
+
+    # FIX: Nur Staff darf /post nutzen
+    if not has_staff_role(interaction.user):
+        await interaction.response.send_message(
+            "❌ You need the **T Staff** role to use this command.",
+            ephemeral=True
+        )
+        return
 
     approve_channel = bot.get_channel(APPROVE_CHANNEL_ID)
 
@@ -479,6 +450,56 @@ async def post(interaction: discord.Interaction, link: str):
     )
 
 
+# ─── NEU: /changelog ──────────────────────────────────────────────────────────
+@bot.tree.command(name="changelog", description="Post a game update to the changelog channel")
+@app_commands.describe(
+    game="Name of the game that was updated",
+    update="Description of the update / what changed"
+)
+async def changelog(interaction: discord.Interaction, game: str, update: str):
+
+    # Nur Staff darf Changelogs posten
+    if not has_staff_role(interaction.user):
+        await interaction.response.send_message(
+            "❌ You need the **T Staff** role to use this command.",
+            ephemeral=True
+        )
+        return
+
+    changelog_channel = bot.get_channel(CHANGELOG_CHANNEL_ID)
+
+    if not changelog_channel:
+        await interaction.response.send_message(
+            "❌ Changelog channel not found. Check `CHANGELOG_CHANNEL_ID` in the config.",
+            ephemeral=True
+        )
+        return
+
+    # Customer-Rolle für den Ping suchen
+    customer_role = discord.utils.find(
+        lambda r: r.name.lower() == CUSTOMER_ROLE_NAME.lower(),
+        interaction.guild.roles
+    )
+
+    embed = discord.Embed(
+        title=f"🔄 {game} — Update",
+        description=update,
+        color=0x6f2cff
+    )
+
+    embed.set_footer(text=f"Posted by {interaction.user} • Virex Team")
+
+    # Ping-Text vorbereiten
+    ping_content = customer_role.mention if customer_role else "@customer"
+
+    await changelog_channel.send(content=ping_content, embed=embed)
+
+    await interaction.response.send_message(
+        f"✅ Changelog für **{game}** wurde gepostet!",
+        ephemeral=True
+    )
+
+
 # ─── ERRORS ───────────────────────────────────────────────────────────────────
 @bot.event
 async def on_command_error(ctx, error):
@@ -487,10 +508,7 @@ async def on_command_error(ctx, error):
         return
 
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(
-            "❌ Missing arguments.",
-            delete_after=5
-        )
+        await ctx.send("❌ Missing arguments.", delete_after=5)
         return
 
     print(f"[ERROR] {error}")
