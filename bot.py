@@ -16,7 +16,7 @@ STAFF_ROLE_NAME = "T Staff"
 APPROVE_CHANNEL_ID = 1504531328731709540
 POST_CHANNEL_ID = 1502194708993146921
 
-CHANGELOG_CHANNEL_ID = 1504869572082274345 # <-- Set your changelog channel ID here
+CHANGELOG_CHANNEL_ID = 1504869572082274345  # <-- Set your changelog channel ID here
 CUSTOMER_ROLE_NAME = "customer"             # <-- Adjust role name if needed
 
 # ─── BOT SETUP ────────────────────────────────────────────────────────────────
@@ -174,6 +174,59 @@ async def on_message(message: discord.Message):
 
 
 # ─── PREFIX COMMANDS ──────────────────────────────────────────────────────────
+@bot.command(name="commands")
+async def commands_list(ctx):
+    if not await staff_check(ctx):
+        return
+
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+
+    embed = discord.Embed(
+        title="📋 Virex Bot — Command List",
+        color=0x6f2cff
+    )
+
+    embed.add_field(
+        name="📌 Prefix Commands (`$`)",
+        value=(
+            "`$commands` — Shows this command list\n"
+            "`$manual` — AnyDesk manual guide\n"
+            "`$activate` — Windows activation guide\n"
+            "`$tempvsperm` — Temp vs Perm Woofer info\n"
+            "`$proof` — Purchase proof instructions\n"
+            "`$ban <user_id> <reason>` — Send a ban request\n"
+            "`$scam` — Post a scam warning (@everyone)\n"
+            "`$anydesk` — AnyDesk setup guide"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="⚡ Slash Commands (`/`)",
+        value=(
+            "`/post <link>` — Submit a video for approval\n"
+            "`/changelog <game> <update>` — Post a game update\n"
+            "`/giveaway <duration> <winners> <prize>` — Start a giveaway\n"
+            "`/gend <message_id>` — End a giveaway immediately\n"
+            "`/greroll <channel> <message_id>` — Reroll a giveaway winner"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔇 Silent Prefix (`*`)",
+        value="`*<text>` — Send a message anonymously (deletes your original)",
+        inline=False
+    )
+
+    embed.set_footer(text="All commands require the T Staff role • Virex Team")
+
+    await ctx.send(embed=embed)
+
+
 @bot.command(name="manual")
 async def manual(ctx):
     if not await staff_check(ctx):
