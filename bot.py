@@ -5,7 +5,7 @@ import asyncio
 import os
 import re
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 PREFIX = "$"
@@ -23,53 +23,52 @@ CUSTOMER_ROLE_NAME = "customer"
 # Channel where deleted messages (word filter hits) are logged
 MESSAGE_LOG_CHANNEL_ID = 1505157714647449700  # <-- SET YOUR LOG CHANNEL ID HERE
 
-# Optional: URL to fetch live status JSON from your website
-# Expected format: { "products": { "Rust": "Undetected", "Fortnite": "Updating", ... } }
-# Set to None to disable live fetching
-STATUS_API_URL = "https://virexx.cc/"  # e.g. "https://virexx.cc/api/status"
-
-# Words that trigger the filter (lowercase, partial match)
-BLACKLISTED_WORDS = [
-    "spoof", "spoofed", "spoofer",
-    "cheat", "cheats", "cheating",
-    "hack", "hacked", "hacking",
-    "aimbot", "wallhack", "esp",
-]
-
-# ─── DEFAULT PRODUCT STATUS ───────────────────────────────────────────────────
-# Status options: "Undetected", "Updating", "Testing", "Detected", "Offline"
+# ─── PRODUCT STATUS ───────────────────────────────────────────────────────────
 product_status: dict[str, str] = {
-    "Apex Legends":     "Testing",
-    "ARC Raiders":      "Updating",
-    "DayZ":             "Updating",
-    "Dead by Daylight": "Undetected",
-    "Delta Force":      "Updating",
-    "EFT":              "Updating",
-    "Fortnite":         "Undetected",
-    "HWID Virtualizer": "Testing",
-    "PUBG":             "Updating",
-    "R6X Lite":         "Undetected",
-    "R6X":              "Undetected",
-    "Rust":             "Undetected",
-}
-
-STATUS_COLORS = {
-    "Undetected": 0x57F287,   # green
-    "Updating":   0x5865F2,   # blue
-    "Testing":    0xFEE75C,   # yellow
-    "Detected":   0xED4245,   # red
-    "Offline":    0x95A5A6,   # grey
+    "Lethal Lite":       "Testing",
+    "Lethal FULL":       "Testing",
+    "CRUSADER":          "Undetected",
+    "Bo6 External":      "Undetected",
+    "BO7/WZ Fade Chair": "Undetected",
+    "ANCIENT R6s":       "Testing",
+    "Vega R6":           "Online",
+    "ONYX FN":           "Updating",
+    "ONYX APEX":         "Updating",
+    "FECURITY Apex":     "Online",
+    "MEMEZ RUST":        "Online",
+    "MEMEZ Lite":        "Online",
+    "MEMEZ FULL":        "Online",
+    "PREDATOR":          "Online",
+    "ONYX SPOOFER":      "Online",
 }
 
 STATUS_DOTS = {
     "Undetected": "🟢",
+    "Online":     "🟢",
     "Updating":   "🔵",
     "Testing":    "🟡",
     "Detected":   "🔴",
     "Offline":    "⚫",
 }
 
-STATUS_OPTIONS = ["Undetected", "Updating", "Testing", "Detected", "Offline"]
+STATUS_COLORS = {
+    "Undetected": 0x57F287,
+    "Online":     0x57F287,
+    "Updating":   0x5865F2,
+    "Testing":    0xFEE75C,
+    "Detected":   0xED4245,
+    "Offline":    0x95A5A6,
+}
+
+# ─── WORD FILTER ──────────────────────────────────────────────────────────────
+# These words trigger deletion + log. Add/remove as needed.
+BLACKLISTED_WORDS = [
+    "spoof", "spoofed", "spoofer", "spoofing",
+    "cheat", "cheats", "cheating", "cheater",
+    "hack", "hacked", "hacking", "hacker",
+    "aimbot", "wallhack", "esp", "triggerbot",
+    "bypass", "injector", "inject",
+]
 
 # ─── BOT SETUP ────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
@@ -85,7 +84,12 @@ bot = commands.Bot(
 # ─── GIVEAWAY STORAGE ─────────────────────────────────────────────────────────
 active_giveaways: dict = {}
 
+
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def has_staff_role(user: discord.Member) -> bool:
     role_names = [r.name.lower() for r in user.roles]
     return STAFF_ROLE_NAME.lower() in role_names
@@ -116,15 +120,14 @@ def build_giveaway_embed(prize, winners, host_id, ends_at, entries) -> discord.E
 
 
 def build_status_embed() -> discord.Embed:
-    """Build the product status embed from current product_status dict."""
     embed = discord.Embed(
         title="📊 Current Product Status",
         color=0x6f2cff,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
 
     items = list(product_status.items())
-    col_size = (len(items) + 2) // 3  # 3 columns
+    col_size = (len(items) + 2) // 3
 
     for col_idx in range(3):
         chunk = items[col_idx * col_size:(col_idx + 1) * col_size]
@@ -138,6 +141,42 @@ def build_status_embed() -> discord.Embed:
 
     embed.set_footer(text="Last updated")
     return embed
+
+
+def check_blacklist(content: str) -> str | None:
+    """Returns the matched word or None. Strips Discord markdown before checking."""
+    # Strip markdown characters so **spoof** or ||spoof|| don't bypass
+    cleaned = re.sub(r"[*_~`|>\\]", "", content.lower())
+    # Also collapse repeated chars like "ssspoof" → won't match, but catches basic bypasses
+    for word in BLACKLISTED_WORDS:
+        if re.search(rf"\b{re.escape(word)}", cleaned):
+            return word
+    return None
+
+
+async def log_deleted_message(message: discord.Message, matched_word: str):
+    if not MESSAGE_LOG_CHANNEL_ID:
+        return
+    log_channel = bot.get_channel(MESSAGE_LOG_CHANNEL_ID)
+    if not log_channel:
+        return
+
+    embed = discord.Embed(
+        title="🚫 Message Deleted — Word Filter",
+        color=0xFF4444,
+        timestamp=utcnow()
+    )
+    embed.add_field(name="👤 User", value=f"{message.author.mention} (`{message.author.id}`)", inline=False)
+    embed.add_field(name="📍 Channel", value=message.channel.mention, inline=True)
+    embed.add_field(name="🔍 Matched Word", value=f"`{matched_word}`", inline=True)
+    embed.add_field(
+        name="💬 Message Content",
+        value=f"```{message.content[:1000]}```" if message.content else "*empty*",
+        inline=False
+    )
+    embed.set_thumbnail(url=message.author.display_avatar.url)
+    embed.set_footer(text=f"User ID: {message.author.id}")
+    await log_channel.send(embed=embed)
 
 
 async def staff_check(ctx) -> bool:
@@ -156,43 +195,13 @@ async def staff_check(ctx) -> bool:
     return True
 
 
-def contains_blacklisted_word(content: str) -> str | None:
-    """Returns the matched blacklisted word, or None."""
-    lower = content.lower()
-    for word in BLACKLISTED_WORDS:
-        if word in lower:
-            return word
-    return None
-
-
-async def log_deleted_message(message: discord.Message, matched_word: str):
-    """Send a log embed to the message log channel."""
-    log_channel = bot.get_channel(MESSAGE_LOG_CHANNEL_ID)
-    if not log_channel:
-        return
-
-    embed = discord.Embed(
-        title="🚫 Message Deleted — Word Filter",
-        color=0xFF4444,
-        timestamp=datetime.utcnow()
-    )
-    embed.add_field(name="👤 User", value=f"{message.author.mention} (`{message.author.id}`)", inline=False)
-    embed.add_field(name="📍 Channel", value=message.channel.mention, inline=True)
-    embed.add_field(name="🔍 Matched Word", value=f"`{matched_word}`", inline=True)
-    embed.add_field(name="💬 Message Content", value=f"```{message.content[:1000]}```", inline=False)
-    embed.set_footer(text=f"User ID: {message.author.id}")
-    await log_channel.send(embed=embed)
-
-
 async def end_giveaway(message_id: int):
     if message_id not in active_giveaways:
         return
-
     data = active_giveaways.pop(message_id)
     channel = bot.get_channel(data["channel_id"])
     if not channel:
         return
-
     try:
         msg = await channel.fetch_message(message_id)
     except discord.NotFound:
@@ -201,7 +210,6 @@ async def end_giveaway(message_id: int):
     entries = list(data["entries"])
     prize = data["prize"]
     winner_count = min(data["winners"], len(entries))
-
     embed = discord.Embed(title=f"🎉 GIVEAWAY ENDED — {prize}", color=0x888888)
 
     if not entries:
@@ -212,14 +220,12 @@ async def end_giveaway(message_id: int):
 
     winners = random.sample(entries, winner_count)
     winner_mentions = " ".join(f"<@{w}>" for w in winners)
-
     embed.description = (
         f"**Prize:** {prize}\n"
         f"**Winner(s):** {winner_mentions}\n"
         f"👑 **Hosted by:** <@{data['host_id']}>"
     )
     embed.set_footer(text="Giveaway ended")
-
     await msg.edit(embed=embed, view=None)
     await channel.send(f"🎉 Congratulations {winner_mentions}! You won **{prize}**!")
 
@@ -238,10 +244,11 @@ async def on_ready():
 
 @bot.event
 async def on_message(message: discord.Message):
+    # Ignore bots
     if message.author.bot:
         return
 
-    # Silent prefix
+    # Silent prefix (staff only)
     if message.content.startswith(SILENT_PREFIX):
         if not has_staff_role(message.author):
             return
@@ -254,26 +261,26 @@ async def on_message(message: discord.Message):
             await message.channel.send(content)
         return
 
-    # ─── WORD FILTER ──────────────────────────────────────────────────────────
-    # Skip filter for staff members
+    # ─── WORD FILTER (non-staff only) ─────────────────────────────────────────
     if not has_staff_role(message.author):
-        matched = contains_blacklisted_word(message.content)
+        matched = check_blacklist(message.content)
         if matched:
+            # Delete message first
             try:
                 await message.delete()
             except discord.Forbidden:
                 pass
 
-            # Warn the user
+            # Warn the user (auto-deletes after 10s)
             warn_embed = discord.Embed(
                 title="⚠️ Message Removed",
                 description=(
-                    f"{message.author.mention}, one or more words in your message are **not allowed** in this server.\n\n"
-                    "**Examples of how to rephrase:**\n"
-                    "• cheat → chair\n"
-                    "• spoof → woof\n"
-                    "• spoofer → woofer\n"
-                    "• hack → h4ck"
+                    f"{message.author.mention}, one or more words in your message are **not allowed** on this server.\n\n"
+                    "**Please rephrase your message. Examples:**\n"
+                    "• `cheat` → `chair`\n"
+                    "• `spoof` → `woof`\n"
+                    "• `spoofer` → `woofer`\n"
+                    "• `hack` → `h4ck`"
                 ),
                 color=0x6f2cff
             )
@@ -287,10 +294,11 @@ async def on_message(message: discord.Message):
             except discord.Forbidden:
                 pass
 
-            # Log to message log channel
+            # Log to staff channel
             await log_deleted_message(message, matched)
-            return
+            return  # Stop here — don't process any commands
 
+    # Process normal commands
     await bot.process_commands(message)
 
 
@@ -352,10 +360,7 @@ async def manual(ctx):
     embed = discord.Embed(title="📖 AnyDesk Manual — Virex", color=0x5865F2)
     embed.add_field(
         name="💰 Perm Guide Assistance",
-        value=(
-            "For **€20** you can hire a Staff member *(NOT Trial Staff)* "
-            "to perform the Perm Guide for you via **AnyDesk**."
-        ),
+        value="For **€20** you can hire a Staff member *(NOT Trial Staff)* to perform the Perm Guide for you via **AnyDesk**.",
         inline=False
     )
     embed.add_field(name="⚠️ Note", value="This is different from the ASUS Manual.", inline=False)
@@ -371,11 +376,7 @@ async def activate(ctx):
         await ctx.message.delete()
     except discord.Forbidden:
         pass
-    embed = discord.Embed(
-        title="🪟 Windows Activation Guide",
-        description="Follow the steps below to activate Windows.",
-        color=0x00B4D8
-    )
+    embed = discord.Embed(title="🪟 Windows Activation Guide", description="Follow the steps below to activate Windows.", color=0x00B4D8)
     embed.add_field(name="1️⃣ Open PowerShell as Administrator", value="Press Windows → type `PowerShell` → Run as Administrator", inline=False)
     embed.add_field(name="2️⃣ Run this command", value="```irm https://get.activated.win/ | iex```", inline=False)
     embed.add_field(name="3️⃣ Press `4`", value="​", inline=True)
@@ -394,16 +395,8 @@ async def tempvsperm(ctx):
     except discord.Forbidden:
         pass
     embed = discord.Embed(title="🐾 Temp vs Perm Woofer", color=0xF4A261)
-    embed.add_field(
-        name="🔒 Permanent Woofer",
-        value="- Permanent serial changes\n- Requires Windows reinstall\n- Long-term security",
-        inline=False
-    )
-    embed.add_field(
-        name="⏳ Temporary Woofer",
-        value="- Lasts one session\n- Resets after restart\n- No reinstall needed",
-        inline=False
-    )
+    embed.add_field(name="🔒 Permanent Woofer", value="- Permanent serial changes\n- Requires Windows reinstall\n- Long-term security", inline=False)
+    embed.add_field(name="⏳ Temporary Woofer", value="- Lasts one session\n- Resets after restart\n- No reinstall needed", inline=False)
     embed.set_footer(text="Virex Team")
     await ctx.send(embed=embed)
 
@@ -416,11 +409,7 @@ async def proof(ctx):
         await ctx.message.delete()
     except discord.Forbidden:
         pass
-    embed = discord.Embed(
-        title="📸 Submit Purchase Proof",
-        description="Follow the instructions below carefully.",
-        color=0x2ECC71
-    )
+    embed = discord.Embed(title="📸 Submit Purchase Proof", description="Follow the instructions below carefully.", color=0x2ECC71)
     embed.add_field(name="📧 Email Confirmation", value="- Screenshot your confirmation email\n- Amount & date must be visible", inline=False)
     embed.add_field(name="💳 Payment Proof", value="- Screenshot PayPal/Crypto transaction\n- Amount & recipient visible", inline=False)
     embed.add_field(name="⚠️ Important", value="Fake screenshots = permanent ban.", inline=False)
@@ -536,7 +525,7 @@ class ApproveView(discord.ui.View):
             return
         embed = discord.Embed(
             title="🎬 New Video Posted",
-            description=(f"{self.link}\n\nMake sure to like and comment on the video.\nSubscribe for more content."),
+            description=f"{self.link}\n\nMake sure to like and comment on the video.\nSubscribe for more content.",
             color=0x2F3136
         )
         embed.set_footer(text=f"Posted by {self.author}")
@@ -570,7 +559,7 @@ async def post(interaction: discord.Interaction, link: str):
         return
     embed = discord.Embed(
         title="📬 New Post Request",
-        description=(f"**User:** {interaction.user.mention}\n**Link:** {link}"),
+        description=f"**User:** {interaction.user.mention}\n**Link:** {link}",
         color=0xffcc00
     )
     embed.set_footer(text=f"Submitted by {interaction.user}")
@@ -599,34 +588,18 @@ async def changelog(interaction: discord.Interaction, game: str, update: str):
 # ─── STATUS COMMANDS ──────────────────────────────────────────────────────────
 @bot.tree.command(name="status", description="Show the current product status")
 async def status(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True)
-
-    # Optional: Fetch live status from website API
-    if STATUS_API_URL:
-        try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(STATUS_API_URL, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if "products" in data and isinstance(data["products"], dict):
-                            for name, st in data["products"].items():
-                                if name in product_status:
-                                    product_status[name] = st
-        except Exception as e:
-            print(f"[Status API] Failed to fetch: {e}")
-
     embed = build_status_embed()
-    await interaction.followup.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="setstatus", description="Manually set a product's status")
+@bot.tree.command(name="setstatus", description="Manually set a product's status (Staff only)")
 @app_commands.describe(
-    product="Product name (e.g. Rust, Fortnite)",
+    product="Product name (e.g. CRUSADER, ONYX FN)",
     new_status="New status to set"
 )
 @app_commands.choices(new_status=[
     app_commands.Choice(name="🟢 Undetected", value="Undetected"),
+    app_commands.Choice(name="🟢 Online",     value="Online"),
     app_commands.Choice(name="🔵 Updating",   value="Updating"),
     app_commands.Choice(name="🟡 Testing",    value="Testing"),
     app_commands.Choice(name="🔴 Detected",   value="Detected"),
@@ -634,20 +607,12 @@ async def status(interaction: discord.Interaction):
 ])
 async def setstatus(interaction: discord.Interaction, product: str, new_status: str):
     if not has_staff_role(interaction.user):
-        await interaction.response.send_message(
-            "❌ You need the **T Staff** role to change product status.",
-            ephemeral=True
-        )
+        await interaction.response.send_message("❌ You need the **T Staff** role to change product status.", ephemeral=True)
         return
 
-    # Case-insensitive product lookup
-    matched_product = None
-    for key in product_status.keys():
-        if key.lower() == product.lower():
-            matched_product = key
-            break
-
-    if matched_product is None:
+    # Case-insensitive match
+    matched = next((k for k in product_status if k.lower() == product.lower()), None)
+    if not matched:
         product_list = "\n".join(f"• {p}" for p in product_status.keys())
         await interaction.response.send_message(
             f"❌ Product **{product}** not found.\n\n**Available products:**\n{product_list}",
@@ -655,16 +620,15 @@ async def setstatus(interaction: discord.Interaction, product: str, new_status: 
         )
         return
 
-    old_status = product_status[matched_product]
-    product_status[matched_product] = new_status
+    old_status = product_status[matched]
+    product_status[matched] = new_status
 
-    dot = STATUS_DOTS.get(new_status, "⚫")
     embed = discord.Embed(
         title="✅ Status Updated",
         description=(
-            f"**Product:** {matched_product}\n"
+            f"**Product:** {matched}\n"
             f"**Old Status:** {STATUS_DOTS.get(old_status, '⚫')} {old_status}\n"
-            f"**New Status:** {dot} {new_status}"
+            f"**New Status:** {STATUS_DOTS.get(new_status, '⚫')} {new_status}"
         ),
         color=STATUS_COLORS.get(new_status, 0x888888)
     )
@@ -712,7 +676,8 @@ async def giveaway_start(interaction: discord.Interaction, duration: str, winner
     if winners < 1:
         await interaction.response.send_message("❌ At least 1 winner required.", ephemeral=True)
         return
-    ends_at = datetime.utcnow() + timedelta(seconds=seconds)
+
+    ends_at = utcnow() + timedelta(seconds=seconds)
     embed = build_giveaway_embed(prize, winners, interaction.user.id, ends_at, 0)
     await interaction.response.send_message("✅ Starting giveaway...", ephemeral=True)
     msg = await interaction.channel.send(content="@everyone", embed=embed)
@@ -764,10 +729,7 @@ async def giveaway_reroll(interaction: discord.Interaction, channel: discord.Tex
         await interaction.response.send_message("❌ Invalid message ID.", ephemeral=True)
         return
     if mid not in active_giveaways:
-        await interaction.response.send_message(
-            "❌ Giveaway not found in memory. Reroll only works if the bot hasn't restarted since the giveaway ended.",
-            ephemeral=True
-        )
+        await interaction.response.send_message("❌ Giveaway not found in memory. Reroll only works if the bot hasn't restarted.", ephemeral=True)
         return
     entries = list(active_giveaways[mid]["entries"])
     prize = active_giveaways[mid]["prize"]
