@@ -19,9 +19,7 @@ POST_CHANNEL_ID = 1502194708993146921
 CHANGELOG_CHANNEL_ID = 1504869572082274345
 CUSTOMER_ROLE_NAME = "customer"
 
-# ─── NEW CONFIG ───────────────────────────────────────────────────────────────
-# Channel where deleted messages (word filter hits) are logged
-MESSAGE_LOG_CHANNEL_ID = 1505157714647449700  # <-- SET YOUR LOG CHANNEL ID HERE
+MESSAGE_LOG_CHANNEL_ID = 1505157714647449700
 
 # ─── PRODUCT STATUS ───────────────────────────────────────────────────────────
 product_status: dict[str, str] = {
@@ -61,7 +59,6 @@ STATUS_COLORS = {
 }
 
 # ─── WORD FILTER ──────────────────────────────────────────────────────────────
-# These words trigger deletion + log. Add/remove as needed.
 BLACKLISTED_WORDS = [
     "spoof", "spoofed", "spoofer", "spoofing",
     "cheat", "cheats", "cheating", "cheater",
@@ -81,7 +78,6 @@ bot = commands.Bot(
     help_command=None
 )
 
-# ─── GIVEAWAY STORAGE ─────────────────────────────────────────────────────────
 active_giveaways: dict = {}
 
 
@@ -125,10 +121,8 @@ def build_status_embed() -> discord.Embed:
         color=0x6f2cff,
         timestamp=utcnow()
     )
-
     items = list(product_status.items())
     col_size = (len(items) + 2) // 3
-
     for col_idx in range(3):
         chunk = items[col_idx * col_size:(col_idx + 1) * col_size]
         if not chunk:
@@ -138,16 +132,12 @@ def build_status_embed() -> discord.Embed:
             dot = STATUS_DOTS.get(status, "⚫")
             field_value += f"{dot} **{name}**\n`{status}`\n\n"
         embed.add_field(name="\u200b", value=field_value.strip(), inline=True)
-
     embed.set_footer(text="Last updated")
     return embed
 
 
 def check_blacklist(content: str) -> str | None:
-    """Returns the matched word or None. Strips Discord markdown before checking."""
-    # Strip markdown characters so **spoof** or ||spoof|| don't bypass
     cleaned = re.sub(r"[*_~`|>\\]", "", content.lower())
-    # Also collapse repeated chars like "ssspoof" → won't match, but catches basic bypasses
     for word in BLACKLISTED_WORDS:
         if re.search(rf"\b{re.escape(word)}", cleaned):
             return word
@@ -155,12 +145,10 @@ def check_blacklist(content: str) -> str | None:
 
 
 async def log_deleted_message(message: discord.Message, matched_word: str):
-    if not MESSAGE_LOG_CHANNEL_ID:
-        return
     log_channel = bot.get_channel(MESSAGE_LOG_CHANNEL_ID)
     if not log_channel:
+        print(f"[FILTER] ⚠️ Log channel {MESSAGE_LOG_CHANNEL_ID} not found!")
         return
-
     embed = discord.Embed(
         title="🚫 Message Deleted — Word Filter",
         color=0xFF4444,
@@ -206,18 +194,15 @@ async def end_giveaway(message_id: int):
         msg = await channel.fetch_message(message_id)
     except discord.NotFound:
         return
-
     entries = list(data["entries"])
     prize = data["prize"]
     winner_count = min(data["winners"], len(entries))
     embed = discord.Embed(title=f"🎉 GIVEAWAY ENDED — {prize}", color=0x888888)
-
     if not entries:
         embed.description = "❌ Nobody entered. No winner was drawn."
         await msg.edit(embed=embed, view=None)
         await channel.send("❌ The giveaway ended with no participants.")
         return
-
     winners = random.sample(entries, winner_count)
     winner_mentions = " ".join(f"<@{w}>" for w in winners)
     embed.description = (
@@ -234,6 +219,8 @@ async def end_giveaway(message_id: int):
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+    print(f"[DEBUG] message_content intent: {bot.intents.message_content}")
+    print(f"[DEBUG] members intent: {bot.intents.members}")
     await bot.change_presence(activity=discord.Game(name="virex.gg | $manual"))
     try:
         synced = await bot.tree.sync()
@@ -244,6 +231,8 @@ async def on_ready():
 
 @bot.event
 async def on_message(message: discord.Message):
+    print(f"[DEBUG] on_message fired | author={message.author} | bot={message.author.bot} | content={repr(message.content)}")
+
     # Ignore bots
     if message.author.bot:
         return
@@ -262,16 +251,19 @@ async def on_message(message: discord.Message):
         return
 
     # ─── WORD FILTER (non-staff only) ─────────────────────────────────────────
-    if not has_staff_role(message.author):
+    is_staff = has_staff_role(message.author)
+    print(f"[DEBUG] is_staff={is_staff} | checking filter...")
+
+    if not is_staff:
         matched = check_blacklist(message.content)
+        print(f"[DEBUG] blacklist check result: {matched}")
         if matched:
-            # Delete message first
+            print(f"[FILTER] 🚫 Deleting message from {message.author} | matched: {matched}")
             try:
                 await message.delete()
             except discord.Forbidden:
-                pass
+                print("[FILTER] ⚠️ Missing permissions to delete message!")
 
-            # Warn the user (auto-deletes after 10s)
             warn_embed = discord.Embed(
                 title="⚠️ Message Removed",
                 description=(
@@ -292,13 +284,11 @@ async def on_message(message: discord.Message):
                     delete_after=10
                 )
             except discord.Forbidden:
-                pass
+                print("[FILTER] ⚠️ Missing permissions to send warning!")
 
-            # Log to staff channel
             await log_deleted_message(message, matched)
-            return  # Stop here — don't process any commands
+            return
 
-    # Process normal commands
     await bot.process_commands(message)
 
 
@@ -311,7 +301,6 @@ async def commands_list(ctx):
         await ctx.message.delete()
     except discord.Forbidden:
         pass
-
     embed = discord.Embed(title="📋 Virex Bot — Command List", color=0x6f2cff)
     embed.add_field(
         name="📌 Prefix Commands (`$`)",
@@ -436,7 +425,6 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
     except Exception:
         user_display = f"Unknown User (`{user_id}`)"
         avatar = None
-
     embed = discord.Embed(title="🔨 Ban Request", color=0xFF0000)
     embed.add_field(name="👤 User", value=user_display, inline=False)
     embed.add_field(name="🛡️ Requested By", value=f"{ctx.author}", inline=False)
@@ -444,7 +432,6 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
     if avatar:
         embed.set_thumbnail(url=avatar)
     embed.set_footer(text=f"User ID: {user_id}")
-
     ban_channel = bot.get_channel(BAN_REQUEST_CHANNEL_ID)
     if ban_channel:
         await ban_channel.send(embed=embed)
@@ -609,8 +596,6 @@ async def setstatus(interaction: discord.Interaction, product: str, new_status: 
     if not has_staff_role(interaction.user):
         await interaction.response.send_message("❌ You need the **T Staff** role to change product status.", ephemeral=True)
         return
-
-    # Case-insensitive match
     matched = next((k for k in product_status if k.lower() == product.lower()), None)
     if not matched:
         product_list = "\n".join(f"• {p}" for p in product_status.keys())
@@ -619,10 +604,8 @@ async def setstatus(interaction: discord.Interaction, product: str, new_status: 
             ephemeral=True
         )
         return
-
     old_status = product_status[matched]
     product_status[matched] = new_status
-
     embed = discord.Embed(
         title="✅ Status Updated",
         description=(
@@ -676,7 +659,6 @@ async def giveaway_start(interaction: discord.Interaction, duration: str, winner
     if winners < 1:
         await interaction.response.send_message("❌ At least 1 winner required.", ephemeral=True)
         return
-
     ends_at = utcnow() + timedelta(seconds=seconds)
     embed = build_giveaway_embed(prize, winners, interaction.user.id, ends_at, 0)
     await interaction.response.send_message("✅ Starting giveaway...", ephemeral=True)
