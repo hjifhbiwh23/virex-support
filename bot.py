@@ -26,7 +26,7 @@ MESSAGE_LOG_CHANNEL_ID = 1505157714647449700  # <-- SET YOUR LOG CHANNEL ID HERE
 # Optional: URL to fetch live status JSON from your website
 # Expected format: { "products": { "Rust": "Undetected", "Fortnite": "Updating", ... } }
 # Set to None to disable live fetching
-STATUS_API_URL = https://virexx.cc/  # e.g. "https://virexx.cc/api/status"
+STATUS_API_URL = "https://virexx.cc/"  # e.g. "https://virexx.cc/api/status"
 
 # Words that trigger the filter (lowercase, partial match)
 BLACKLISTED_WORDS = [
