@@ -21,6 +21,8 @@ CUSTOMER_ROLE_NAME = "customer"
 
 MESSAGE_LOG_CHANNEL_ID = 1505157714647449700
 
+VOUCH_CHANNEL_ID = 1502194708993146921  # ← Change to your actual vouch channel ID
+
 # ─── PRODUCT STATUS ───────────────────────────────────────────────────────────
 product_status: dict[str, str] = {
     "Lethal Lite":       "Testing",
@@ -67,6 +69,9 @@ BLACKLISTED_WORDS = [
     "bypass", "injector", "inject",
 ]
 
+# ─── VOUCH COUNTER ────────────────────────────────────────────────────────────
+vouch_counter: int = 1  # Auto-incrementing vouch number
+
 # ─── BOT SETUP ────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
 intents.message_content = True
@@ -91,6 +96,11 @@ def has_staff_role(user: discord.Member) -> bool:
     return STAFF_ROLE_NAME.lower() in role_names
 
 
+def has_customer_role(user: discord.Member) -> bool:
+    role_names = [r.name.lower() for r in user.roles]
+    return CUSTOMER_ROLE_NAME.lower() in role_names
+
+
 def parse_duration(duration_str: str) -> int | None:
     match = re.fullmatch(r"(\d+)([smhd])", duration_str.strip().lower())
     if not match:
@@ -99,16 +109,20 @@ def parse_duration(duration_str: str) -> int | None:
     return value * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
 
 
-def build_giveaway_embed(prize, winners, host_id, ends_at, entries) -> discord.Embed:
+def build_giveaway_embed(prize, winners, host_id, ends_at, entries, requirements=None) -> discord.Embed:
+    description = (
+        f"Click **🎉 Enter** to participate!\n\n"
+        f"🏆 **Winners:** {winners}\n"
+        f"👥 **Entries:** {entries}\n"
+        f"🕐 **Ends:** <t:{int(ends_at.timestamp())}:R>\n"
+        f"👑 **Hosted by:** <@{host_id}>"
+    )
+    if requirements:
+        description += f"\n\n📋 **Requirements to enter:**\n{requirements}"
+
     embed = discord.Embed(
         title=f"🎉 GIVEAWAY — {prize}",
-        description=(
-            f"Click **🎉 Enter** to participate!\n\n"
-            f"🏆 **Winners:** {winners}\n"
-            f"👥 **Entries:** {entries}\n"
-            f"🕐 **Ends:** <t:{int(ends_at.timestamp())}:R>\n"
-            f"👑 **Hosted by:** <@{host_id}>"
-        ),
+        description=description,
         color=0xFF73FA
     )
     embed.set_footer(text=f"Ends on {ends_at.strftime('%d.%m.%Y at %H:%M')} UTC")
@@ -218,6 +232,7 @@ async def end_giveaway(message_id: int):
 # ─── EVENTS ───────────────────────────────────────────────────────────────────
 @bot.event
 async def on_ready():
+    global vouch_counter
     print(f"✅ Logged in as {bot.user}")
     print(f"[DEBUG] message_content intent: {bot.intents.message_content}")
     print(f"[DEBUG] members intent: {bot.intents.members}")
@@ -233,11 +248,9 @@ async def on_ready():
 async def on_message(message: discord.Message):
     print(f"[DEBUG] on_message fired | author={message.author} | bot={message.author.bot} | content={repr(message.content)}")
 
-    # Ignore bots
     if message.author.bot:
         return
 
-    # Silent prefix (staff only)
     if message.content.startswith(SILENT_PREFIX):
         if not has_staff_role(message.author):
             return
@@ -250,7 +263,6 @@ async def on_message(message: discord.Message):
             await message.channel.send(content)
         return
 
-    # ─── WORD FILTER (non-staff only) ─────────────────────────────────────────
     is_staff = has_staff_role(message.author)
     print(f"[DEBUG] is_staff={is_staff} | checking filter...")
 
@@ -321,11 +333,12 @@ async def commands_list(ctx):
         value=(
             "`/post <link>` — Submit a video for approval\n"
             "`/changelog <game> <update>` — Post a game update\n"
-            "`/giveaway <duration> <winners> <prize>` — Start a giveaway\n"
+            "`/giveaway <duration> <winners> <prize> [requirements]` — Start a giveaway\n"
             "`/gend <message_id>` — End a giveaway immediately\n"
             "`/greroll <channel> <message_id>` — Reroll a giveaway winner\n"
             "`/status` — Show current product status\n"
-            "`/setstatus <product> <status>` — Manually update a product's status"
+            "`/setstatus <product> <status>` — Manually update a product's status\n"
+            "`/vouch <stars> <message>` — Leave a vouch (customers only)"
         ),
         inline=False
     )
@@ -334,7 +347,7 @@ async def commands_list(ctx):
         value="`*<text>` — Send a message anonymously (deletes your original)",
         inline=False
     )
-    embed.set_footer(text="All commands require the T Staff role • Virex Team")
+    embed.set_footer(text="All staff commands require the T Staff role • Virex Team")
     await ctx.send(embed=embed)
 
 
@@ -619,6 +632,67 @@ async def setstatus(interaction: discord.Interaction, product: str, new_status: 
     await interaction.response.send_message(embed=embed)
 
 
+# ─── VOUCH COMMAND ────────────────────────────────────────────────────────────
+@bot.tree.command(name="vouch", description="Leave a vouch for Virex (customers only)")
+@app_commands.describe(
+    stars="Your rating (1–5 stars)",
+    message="Your vouch message"
+)
+@app_commands.choices(stars=[
+    app_commands.Choice(name="⭐ 1 Star",     value=1),
+    app_commands.Choice(name="⭐⭐ 2 Stars",   value=2),
+    app_commands.Choice(name="⭐⭐⭐ 3 Stars", value=3),
+    app_commands.Choice(name="⭐⭐⭐⭐ 4 Stars",      value=4),
+    app_commands.Choice(name="⭐⭐⭐⭐⭐ 5 Stars",    value=5),
+])
+async def vouch(interaction: discord.Interaction, stars: int, message: str):
+    global vouch_counter
+
+    # Only customers can vouch
+    if not has_customer_role(interaction.user):
+        await interaction.response.send_message(
+            "❌ You need the **customer** role to leave a vouch.\n"
+            "Purchase a product first to receive this role.",
+            ephemeral=True
+        )
+        return
+
+    vouch_channel = bot.get_channel(VOUCH_CHANNEL_ID)
+    if not vouch_channel:
+        await interaction.response.send_message("❌ Vouch channel not found. Contact an admin.", ephemeral=True)
+        return
+
+    star_display = "⭐" * stars
+    now = utcnow()
+    vouch_num = vouch_counter
+    vouch_counter += 1
+
+    embed = discord.Embed(
+        title="New vouch created!",
+        color=0x57F287
+    )
+    embed.add_field(name="Stars", value=star_display, inline=False)
+    embed.add_field(name="Vouch:", value=message, inline=False)
+    embed.add_field(
+        name="Vouch N°:",
+        value=str(vouch_num),
+        inline=True
+    )
+    embed.add_field(
+        name="Vouched at:",
+        value=now.strftime("%A, %B %d, %Y %I:%M %p"),
+        inline=True
+    )
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    embed.set_footer(text=f"Vouched by {interaction.user} • Virex Team")
+
+    await vouch_channel.send(
+        content=f"Vouched by: {interaction.user.mention}",
+        embed=embed
+    )
+    await interaction.response.send_message("✅ Your vouch has been submitted, thank you!", ephemeral=True)
+
+
 # ─── GIVEAWAY VIEW ────────────────────────────────────────────────────────────
 class GiveawayView(discord.ui.View):
     def __init__(self, message_id: int):
@@ -639,7 +713,11 @@ class GiveawayView(discord.ui.View):
             data["entries"].add(user_id)
             await interaction.response.send_message(f"🎉 You are now entered in the giveaway for **{data['prize']}**!", ephemeral=True)
         try:
-            embed = build_giveaway_embed(data["prize"], data["winners"], data["host_id"], data["ends_at"], len(data["entries"]))
+            embed = build_giveaway_embed(
+                data["prize"], data["winners"], data["host_id"],
+                data["ends_at"], len(data["entries"]),
+                data.get("requirements")
+            )
             await interaction.message.edit(embed=embed)
         except Exception:
             pass
@@ -647,8 +725,13 @@ class GiveawayView(discord.ui.View):
 
 # ─── GIVEAWAY SLASH COMMANDS ──────────────────────────────────────────────────
 @bot.tree.command(name="giveaway", description="Start a giveaway")
-@app_commands.describe(duration="Duration e.g. 10m, 2h, 1d", winners="Number of winners", prize="What is being given away?")
-async def giveaway_start(interaction: discord.Interaction, duration: str, winners: int, prize: str):
+@app_commands.describe(
+    duration="Duration e.g. 10m, 2h, 1d",
+    winners="Number of winners",
+    prize="What is being given away?",
+    requirements="Optional requirements to enter (e.g. comment 3 positive things, follow & watch to end)"
+)
+async def giveaway_start(interaction: discord.Interaction, duration: str, winners: int, prize: str, requirements: str = None):
     if not has_staff_role(interaction.user):
         await interaction.response.send_message("❌ You need the **T Staff** role to start a giveaway.", ephemeral=True)
         return
@@ -660,7 +743,7 @@ async def giveaway_start(interaction: discord.Interaction, duration: str, winner
         await interaction.response.send_message("❌ At least 1 winner required.", ephemeral=True)
         return
     ends_at = utcnow() + timedelta(seconds=seconds)
-    embed = build_giveaway_embed(prize, winners, interaction.user.id, ends_at, 0)
+    embed = build_giveaway_embed(prize, winners, interaction.user.id, ends_at, 0, requirements)
     await interaction.response.send_message("✅ Starting giveaway...", ephemeral=True)
     msg = await interaction.channel.send(content="@everyone", embed=embed)
     active_giveaways[msg.id] = {
@@ -669,7 +752,8 @@ async def giveaway_start(interaction: discord.Interaction, duration: str, winner
         "winners": winners,
         "host_id": interaction.user.id,
         "ends_at": ends_at,
-        "entries": set()
+        "entries": set(),
+        "requirements": requirements  # stored so the embed updates correctly
     }
     view = GiveawayView(msg.id)
     await msg.edit(view=view)
