@@ -21,7 +21,7 @@ CUSTOMER_ROLE_NAME = "customer"
 
 MESSAGE_LOG_CHANNEL_ID = 1505157714647449700
 
-VOUCH_CHANNEL_ID = 1502194708993146921  # ← Change to your actual vouch channel ID
+VOUCH_CHANNEL_ID = 1502194368059146290  # ← Change to your actual vouch channel ID
 
 # ─── PRODUCT STATUS ───────────────────────────────────────────────────────────
 product_status: dict[str, str] = {
