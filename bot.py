@@ -481,17 +481,7 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
 async def r6guide(interaction: discord.Interaction):
     embed = discord.Embed(
         title="📖 Vega R6 — Setup Guide",
-        description=(
-            f"**[🔗 Click here to open the full guide]({R6_GUIDE_URL})**\n\n"
-            "Follow all steps carefully for a successful injection.\n\n"
-            "**Quick Overview:**\n"
-            "1️⃣ Register with your Invite Code & Cheat Key\n"
-            "2️⃣ Login and press **Load**\n"
-            "3️⃣ Reboot → Login again → Press **Load** again\n"
-            "4️⃣ Start R6 in **BORDERLESS** mode\n"
-            "5️⃣ Press **INSERT** to open the menu in-game\n\n"
-            "⬇️ **[Download Loader](https://mega.nz/folder/OAkhFCbJ#X0bbzcy5PFIiOJOWnuQyog)**"
-        ),
+        description=f"**[🔗 Click here to open the full guide]({R6_GUIDE_URL})**",
         color=0x0A84FF
     )
     embed.set_footer(text="Virex Team • virex.gg")
