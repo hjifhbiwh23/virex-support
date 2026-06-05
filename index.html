@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VEGA R6 — Setup Guide | Virex</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020810;
+    --bg2: #060e1c;
+    --panel: rgba(6,18,40,0.85);
+    --blue: #0A84FF;
+    --blue2: #00C6FF;
+    --glow: #0A84FF;
+    --line: rgba(10,132,255,0.25);
+    --text: #c8deff;
+    --text-dim: #5a7aa0;
+    --accent: #00e5ff;
+    --white: #ffffff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridShift 20s linear infinite;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  @keyframes gridShift {
+    from { transform: translateY(0); }
+    to { transform: translateY(60px); }
+  }
+
+  /* Diagonal glow sweep like the logo */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -20%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+      135deg,
+      transparent 40%,
+      rgba(0, 100, 255, 0.04) 50%,
+      rgba(0, 200, 255, 0.08) 52%,
+      transparent 55%
+    );
+    animation: sweep 8s ease-in-out infinite alternate;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  @keyframes sweep {
+    from { transform: translateX(-10%) rotate(0deg); }
+    to   { transform: translateX(10%) rotate(2deg); }
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    text-align: center;
+    padding: 60px 0 50px;
+    position: relative;
+  }
+
+  .logo-vx {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 52px;
+    letter-spacing: 8px;
+    background: linear-gradient(135deg, #fff 30%, var(--blue2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 30px rgba(10,132,255,0.5));
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .subtitle-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 6px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 30px;
+    opacity: 0.7;
+  }
+
+  header h1 {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: clamp(32px, 6vw, 58px);
+    line-height: 1;
+    letter-spacing: 2px;
+    color: var(--white);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  header h1 span {
+    color: var(--blue2);
+    text-shadow: 0 0 20px var(--blue);
+  }
+
+  header p {
+    font-size: 14px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--blue), var(--accent), transparent);
+    margin: 40px 0;
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* ── DOWNLOAD BUTTON ── */
+  .download-wrap {
+    text-align: center;
+    margin-bottom: 50px;
+  }
+
+  .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #0A84FF, #00C6FF);
+    color: #000;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 16px 40px;
+    clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%);
+    position: relative;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 40px rgba(10,132,255,0.4);
+  }
+
+  .btn-download:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 60px rgba(10,132,255,0.7);
+    background: linear-gradient(135deg, #2196ff, #00e5ff);
+  }
+
+  .btn-download svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* ── STEPS ── */
+  .steps-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 5px;
+    color: var(--blue2);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .steps-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 0 20px;
+    margin-bottom: 16px;
+    position: relative;
+    animation: fadeIn 0.5s ease both;
+  }
+
+  .step:nth-child(1) { animation-delay: 0.05s; }
+  .step:nth-child(2) { animation-delay: 0.10s; }
+  .step:nth-child(3) { animation-delay: 0.15s; }
+  .step:nth-child(4) { animation-delay: 0.20s; }
+  .step:nth-child(5) { animation-delay: 0.25s; }
+  .step:nth-child(6) { animation-delay: 0.30s; }
+  .step:nth-child(7) { animation-delay: 0.35s; }
+  .step:nth-child(8) { animation-delay: 0.40s; }
+  .step:nth-child(9) { animation-delay: 0.45s; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-16px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .step-num {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .step-num .num {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, rgba(10,132,255,0.15), rgba(0,198,255,0.08));
+    border: 1px solid rgba(10,132,255,0.4);
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--blue2);
+    text-shadow: 0 0 10px var(--blue);
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .step:hover .step-num .num {
+    background: linear-gradient(135deg, rgba(10,132,255,0.3), rgba(0,198,255,0.15));
+    border-color: var(--blue2);
+    box-shadow: 0 0 20px rgba(10,132,255,0.3);
+  }
+
+  .step-num .line {
+    width: 1px;
+    flex: 1;
+    background: linear-gradient(to bottom, rgba(10,132,255,0.3), transparent);
+    min-height: 16px;
+  }
+
+  .step:last-child .step-num .line { display: none; }
+
+  .step-body {
+    background: var(--panel);
+    border: 1px solid rgba(10,132,255,0.15);
+    border-left: 2px solid rgba(10,132,255,0.4);
+    padding: 14px 20px;
+    margin-bottom: 4px;
+    position: relative;
+    transition: all 0.3s;
+  }
+
+  .step:hover .step-body {
+    border-color: rgba(10,132,255,0.5);
+    border-left-color: var(--blue2);
+    background: rgba(6,24,55,0.9);
+    box-shadow: 0 0 20px rgba(10,132,255,0.08), inset 0 0 20px rgba(10,132,255,0.03);
+  }
+
+  .step-body p {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  .step-body code {
+    font-family: 'Share Tech Mono', monospace;
+    background: rgba(10,132,255,0.12);
+    border: 1px solid rgba(10,132,255,0.3);
+    color: var(--accent);
+    padding: 2px 8px;
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  /* ── TIPS ── */
+  .tips {
+    margin-top: 40px;
+    background: rgba(10,132,255,0.05);
+    border: 1px solid rgba(10,132,255,0.2);
+    border-top: 2px solid var(--blue);
+    padding: 24px 28px;
+  }
+
+  .tips h3 {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 4px;
+    color: var(--blue2);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .tips ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tips li {
+    font-size: 14px;
+    color: var(--text-dim);
+    padding-left: 20px;
+    position: relative;
+    line-height: 1.5;
+  }
+
+  .tips li::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--blue);
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    margin-top: 60px;
+    padding-top: 30px;
+    border-top: 1px solid var(--line);
+  }
+
+  footer p {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+  }
+
+  .corner-tl, .corner-br {
+    position: fixed;
+    width: 60px;
+    height: 60px;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.4;
+  }
+  .corner-tl {
+    top: 20px; left: 20px;
+    border-top: 2px solid var(--blue);
+    border-left: 2px solid var(--blue);
+  }
+  .corner-br {
+    bottom: 20px; right: 20px;
+    border-bottom: 2px solid var(--blue);
+    border-right: 2px solid var(--blue);
+  }
+</style>
+</head>
+<body>
+
+<div class="corner-tl"></div>
+<div class="corner-br"></div>
+
+<div class="container">
+  <header>
+    <span class="logo-vx">VIREX</span>
+    <div class="subtitle-tag">OFFICIAL SOFTWARE GUIDE</div>
+    <h1>VEGA <span>R6</span> SETUP</h1>
+    <p>// FOLLOW EACH STEP CAREFULLY FOR SUCCESSFUL INJECTION //</p>
+  </header>
+
+  <div class="divider"></div>
+
+  <div class="download-wrap">
+    <a href="https://mega.nz/folder/OAkhFCbJ#X0bbzcy5PFIiOJOWnuQyog" target="_blank" class="btn-download">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+      </svg>
+      DOWNLOAD LOADER
+    </a>
+  </div>
+
+  <div class="steps-title">// SETUP PROCEDURE</div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">01</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>If you use the cheat for the <strong>first time</strong>, you have to <strong>register first</strong>. The register button is right below the login button — click it.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">02</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>Enter your desired <strong>username</strong> and <strong>password</strong>. Make sure to meet all password requirements before continuing.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">03</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>Type in your <strong>Invite Code</strong> and <strong>Cheat Key</strong> as provided after purchase. Both are required to complete registration.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">04</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>After registration succeeds, <strong>log in</strong> with your credentials. You should now see your active cheat subscriptions in the dashboard.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">05</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>Press the <strong>Load</strong> button. A pop-up will appear asking you to <strong>reboot your machine</strong>. Confirm and restart your PC.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">06</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>After rebooting, <strong>re-open the loader</strong> and log in again with your credentials.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">07</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>Press <strong>Load</strong> for the second time. If everything went correctly, the loader will <strong>close itself automatically</strong>. This is normal behavior — if the loader stays open, something went wrong.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">08</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>Start <strong>Rainbow Six Siege</strong> and make sure the game is running in <code>BORDERLESS</code> window mode. This is required for the overlay to work.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num"><div class="num">09</div><div class="line"></div></div>
+    <div class="step-body">
+      <p>Once you are inside a game window, press the <code>INSERT</code> key — the menu should appear. Use <code>INSERT</code> to toggle the menu open and closed at any time.</p>
+    </div>
+  </div>
+
+  <div class="tips">
+    <h3>// Important Notes</h3>
+    <ul>
+      <li>Always run the loader as Administrator for best results.</li>
+      <li>If injection fails, make sure your antivirus / Windows Defender is disabled.</li>
+      <li>The loader closing itself after the second Load is expected — do not reopen it.</li>
+      <li>Use BORDERLESS window mode only. Fullscreen and Windowed modes are not supported.</li>
+      <li>If you encounter issues, open a support ticket — do not share keys or credentials.</li>
+    </ul>
+  </div>
+
+  <footer>
+    <p>© VIREX TEAM — VEGA R6 — OFFICIAL SETUP GUIDE — virex.gg</p>
+  </footer>
+</div>
+
+</body>
+</html>
