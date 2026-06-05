@@ -6,6 +6,8 @@ import os
 import re
 import random
 from datetime import datetime, timezone, timedelta
+from flask import Flask
+from threading import Thread
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 PREFIX = "$"
@@ -23,7 +25,7 @@ MESSAGE_LOG_CHANNEL_ID = 1505157714647449700
 
 VOUCH_CHANNEL_ID = 1502194368059146290  # ← Change to your actual vouch channel ID
 
-R6_GUIDE_URL = "worker-production-0a23.up.railway.app"  # ← Deine gehostete URL hier
+R6_GUIDE_URL = "https://worker-production-0a23.up.railway.app/guide"
 
 # ─── PRODUCT STATUS ───────────────────────────────────────────────────────────
 product_status: dict[str, str] = {
@@ -86,6 +88,17 @@ bot = commands.Bot(
 )
 
 active_giveaways: dict = {}
+
+# ─── HTTP SERVER ──────────────────────────────────────────────────────────────
+app = Flask(__name__)
+
+@app.route('/guide')
+def serve_guide():
+    with open('index.html', 'r', encoding='utf-8') as f:
+        return f.read()
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8080, debug=False)
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -244,6 +257,13 @@ async def on_ready():
         print(f"✅ Synced {len(synced)} slash command(s)")
     except Exception as e:
         print(f"❌ Failed to sync commands: {e}")
+
+    # Start Flask server in background thread
+    if not hasattr(bot, 'flask_started'):
+        flask_thread = Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        bot.flask_started = True
+        print("✅ Flask HTTP server started on port 8080")
 
 
 @bot.event
