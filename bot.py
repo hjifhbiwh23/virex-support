@@ -8,6 +8,8 @@ import random
 from datetime import datetime, timezone, timedelta
 from flask import Flask
 from threading import Thread
+import asyncpg
+import json
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 PREFIX = "$"
@@ -15,6 +17,7 @@ SILENT_PREFIX = "*"
 
 BAN_REQUEST_CHANNEL_ID = 1504101352475725945
 STAFF_ROLE_NAME = "T Staff"
+BLACKLIST_ADMIN_ROLE = "T Staff"  # Role required for blacklist commands
 APPROVE_CHANNEL_ID = 1504531328731709540
 POST_CHANNEL_ID = 1502194708993146921
 
@@ -26,6 +29,9 @@ MESSAGE_LOG_CHANNEL_ID = 1505157714647449700
 VOUCH_CHANNEL_ID = 1502194368059146290  # ← Change to your actual vouch channel ID
 
 R6_GUIDE_URL = "https://worker-production-0a23.up.railway.app/guide"
+
+# ─── DATABASE CONFIG ──────────────────────────────────────────────────────────
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # ─── PRODUCT STATUS ───────────────────────────────────────────────────────────
 product_status: dict[str, str] = {
@@ -88,6 +94,7 @@ bot = commands.Bot(
 )
 
 active_giveaways: dict = {}
+db_pool: asyncpg.Pool = None
 
 # ─── HTTP SERVER ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -101,6 +108,122 @@ def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False)
 
 
+# ─── DATABASE HELPERS ─────────────────────────────────────────────────────────
+async def init_db():
+    """Initialize database connection pool and create tables"""
+    global db_pool
+    if not DATABASE_URL:
+        print("❌ DATABASE_URL environment variable not set!")
+        return False
+    
+    try:
+        db_pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=2,
+            max_size=10,
+            command_timeout=60,
+            ssl='require'
+        )
+        
+        async with db_pool.acquire() as conn:
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS blacklist (
+                    user_id BIGINT PRIMARY KEY,
+                    reason TEXT NOT NULL,
+                    blacklisted_by BIGINT NOT NULL,
+                    blacklisted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    guild_id BIGINT NOT NULL
+                )
+            ''')
+        
+        print("✅ Database initialized successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Database error: {e}")
+        return False
+
+
+async def add_to_blacklist(user_id: int, reason: str, staff_id: int, guild_id: int) -> bool:
+    """Add user to blacklist"""
+    if not db_pool:
+        return False
+    
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute('''
+                INSERT INTO blacklist (user_id, reason, blacklisted_by, guild_id)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id) DO UPDATE
+                SET reason = $2, blacklisted_by = $3, blacklisted_at = NOW()
+            ''', user_id, reason, staff_id, guild_id)
+        return True
+    except Exception as e:
+        print(f"❌ Error adding to blacklist: {e}")
+        return False
+
+
+async def remove_from_blacklist(user_id: int) -> bool:
+    """Remove user from blacklist"""
+    if not db_pool:
+        return False
+    
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute('DELETE FROM blacklist WHERE user_id = $1', user_id)
+        return True
+    except Exception as e:
+        print(f"❌ Error removing from blacklist: {e}")
+        return False
+
+
+async def is_blacklisted(user_id: int) -> bool:
+    """Check if user is blacklisted"""
+    if not db_pool:
+        return False
+    
+    try:
+        async with db_pool.acquire() as conn:
+            result = await conn.fetchval('SELECT user_id FROM blacklist WHERE user_id = $1', user_id)
+        return result is not None
+    except Exception as e:
+        print(f"❌ Error checking blacklist: {e}")
+        return False
+
+
+async def get_blacklist(guild_id: int) -> list:
+    """Get all blacklisted users for a guild"""
+    if not db_pool:
+        return []
+    
+    try:
+        async with db_pool.acquire() as conn:
+            records = await conn.fetch(
+                'SELECT user_id, reason, blacklisted_by, blacklisted_at FROM blacklist WHERE guild_id = $1 ORDER BY blacklisted_at DESC',
+                guild_id
+            )
+        return records
+    except Exception as e:
+        print(f"❌ Error fetching blacklist: {e}")
+        return []
+
+
+async def get_blacklist_entry(user_id: int) -> dict:
+    """Get a specific blacklist entry"""
+    if not db_pool:
+        return None
+    
+    try:
+        async with db_pool.acquire() as conn:
+            record = await conn.fetchrow(
+                'SELECT user_id, reason, blacklisted_by, blacklisted_at FROM blacklist WHERE user_id = $1',
+                user_id
+            )
+        return dict(record) if record else None
+    except Exception as e:
+        print(f"❌ Error fetching blacklist entry: {e}")
+        return None
+
+
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -109,6 +232,11 @@ def utcnow() -> datetime:
 def has_staff_role(user: discord.Member) -> bool:
     role_names = [r.name.lower() for r in user.roles]
     return STAFF_ROLE_NAME.lower() in role_names
+
+
+def has_blacklist_admin_role(user: discord.Member) -> bool:
+    role_names = [r.name.lower() for r in user.roles]
+    return BLACKLIST_ADMIN_ROLE.lower() in role_names
 
 
 def has_customer_role(user: discord.Member) -> bool:
@@ -212,6 +340,22 @@ async def staff_check(ctx) -> bool:
     return True
 
 
+async def blacklist_admin_check(ctx) -> bool:
+    if not has_blacklist_admin_role(ctx.author):
+        embed = discord.Embed(
+            title="❌ No Permission",
+            description=f"You need the **{BLACKLIST_ADMIN_ROLE}** role to use this command.",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=5)
+        try:
+            await ctx.message.delete()
+        except discord.Forbidden:
+            pass
+        return False
+    return True
+
+
 async def end_giveaway(message_id: int):
     if message_id not in active_giveaways:
         return
@@ -264,6 +408,33 @@ async def on_ready():
         flask_thread.start()
         bot.flask_started = True
         print("✅ Flask HTTP server started on port 8080")
+
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    """Auto-ban blacklisted users when they join"""
+    if await is_blacklisted(member.id):
+        try:
+            blacklist_entry = await get_blacklist_entry(member.id)
+            await member.ban(reason=f"Blacklisted: {blacklist_entry['reason']}")
+            print(f"🔨 Auto-banned blacklisted user: {member} ({member.id})")
+            
+            # Log the auto-ban
+            log_channel = bot.get_channel(MESSAGE_LOG_CHANNEL_ID)
+            if log_channel:
+                embed = discord.Embed(
+                    title="🔨 Auto-Ban — Blacklist",
+                    color=0xFF0000,
+                    timestamp=utcnow()
+                )
+                embed.add_field(name="👤 User", value=f"{member} (`{member.id}`)", inline=False)
+                embed.add_field(name="📝 Reason", value=blacklist_entry['reason'], inline=False)
+                embed.set_footer(text="Auto-banned on join")
+                await log_channel.send(embed=embed)
+        except discord.Forbidden:
+            print(f"⚠️ Failed to ban {member.id} - Missing permissions")
+        except Exception as e:
+            print(f"❌ Error auto-banning {member.id}: {e}")
 
 
 @bot.event
@@ -346,7 +517,11 @@ async def commands_list(ctx):
             "`$proof` — Purchase proof instructions\n"
             "`$ban <user_id> <reason>` — Send a ban request\n"
             "`$scam` — Post a scam warning (@everyone)\n"
-            "`$anydesk` — AnyDesk setup guide"
+            "`$anydesk` — AnyDesk setup guide\n\n"
+            "**🔒 Blacklist Commands (Admin only):**\n"
+            "`$blacklist <user_id> <reason>` — Add user to blacklist\n"
+            "`$unblacklist <user_id>` — Remove user from blacklist\n"
+            "`$blist` — Show all blacklisted users"
         ),
         inline=False
     )
@@ -373,6 +548,229 @@ async def commands_list(ctx):
     await ctx.send(embed=embed)
 
 
+# ─── BLACKLIST COMMANDS ───────────────────────────────────────────────────────
+@bot.command(name="blacklist")
+async def blacklist_user(ctx, user_id: str = None, *, reason: str = None):
+    """Add a user to the blacklist"""
+    if not await blacklist_admin_check(ctx):
+        return
+    
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+    
+    if not user_id or not reason:
+        embed = discord.Embed(
+            title="❌ Incorrect Usage",
+            description="Usage: `$blacklist <user_id> <reason>`\n\nExample: `$blacklist 123456789 Scammer`",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=10)
+        return
+    
+    try:
+        uid = int(user_id)
+    except ValueError:
+        embed = discord.Embed(
+            title="❌ Invalid User ID",
+            description="User ID must be a number.",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=10)
+        return
+    
+    # Try to get user info
+    try:
+        user = await bot.fetch_user(uid)
+        user_display = f"{user} (`{uid}`)"
+        avatar = user.display_avatar.url
+    except Exception:
+        user_display = f"Unknown User (`{uid}`)"
+        avatar = None
+    
+    # Add to database
+    success = await add_to_blacklist(uid, reason, ctx.author.id, ctx.guild.id)
+    
+    if success:
+        # Try to ban from server if they're a member
+        try:
+            member = await ctx.guild.fetch_member(uid)
+            await member.ban(reason=f"Blacklisted: {reason}")
+            ban_status = "✅ User has been banned from the server"
+        except discord.NotFound:
+            ban_status = "⚠️ User is not a member of the server"
+        except discord.Forbidden:
+            ban_status = "⚠️ Could not ban user (missing permissions)"
+        except Exception as e:
+            ban_status = f"⚠️ Could not ban user: {e}"
+        
+        embed = discord.Embed(
+            title="✅ User Blacklisted",
+            color=0xFF0000
+        )
+        embed.add_field(name="👤 User", value=user_display, inline=False)
+        embed.add_field(name="📝 Reason", value=reason, inline=False)
+        embed.add_field(name="⏰ Timestamp", value=utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"), inline=False)
+        embed.add_field(name="🔨 Ban Status", value=ban_status, inline=False)
+        if avatar:
+            embed.set_thumbnail(url=avatar)
+        embed.set_footer(text=f"Blacklisted by {ctx.author} • Virex Team")
+        await ctx.send(embed=embed)
+    else:
+        embed = discord.Embed(
+            title="❌ Database Error",
+            description="Failed to add user to blacklist. Please try again.",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=10)
+
+
+@bot.command(name="unblacklist")
+async def unblacklist_user(ctx, user_id: str = None):
+    """Remove a user from the blacklist"""
+    if not await blacklist_admin_check(ctx):
+        return
+    
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+    
+    if not user_id:
+        embed = discord.Embed(
+            title="❌ Incorrect Usage",
+            description="Usage: `$unblacklist <user_id>`\n\nExample: `$unblacklist 123456789`",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=10)
+        return
+    
+    try:
+        uid = int(user_id)
+    except ValueError:
+        embed = discord.Embed(
+            title="❌ Invalid User ID",
+            description="User ID must be a number.",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=10)
+        return
+    
+    # Check if user is blacklisted
+    if not await is_blacklisted(uid):
+        embed = discord.Embed(
+            title="❌ Not Blacklisted",
+            description=f"User `{uid}` is not on the blacklist.",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=10)
+        return
+    
+    # Get entry before removing
+    entry = await get_blacklist_entry(uid)
+    
+    # Remove from blacklist
+    success = await remove_from_blacklist(uid)
+    
+    if success:
+        try:
+            user = await bot.fetch_user(uid)
+            user_display = f"{user} (`{uid}`)"
+            avatar = user.display_avatar.url
+        except Exception:
+            user_display = f"Unknown User (`{uid}`)"
+            avatar = None
+        
+        embed = discord.Embed(
+            title="✅ User Removed from Blacklist",
+            color=0x00FF00
+        )
+        embed.add_field(name="👤 User", value=user_display, inline=False)
+        embed.add_field(name="📝 Previous Reason", value=entry['reason'], inline=False)
+        embed.add_field(name="⏰ Was Blacklisted Since", value=entry['blacklisted_at'].strftime("%Y-%m-%d %H:%M:%S UTC"), inline=False)
+        if avatar:
+            embed.set_thumbnail(url=avatar)
+        embed.set_footer(text=f"Removed by {ctx.author} • Virex Team")
+        await ctx.send(embed=embed)
+    else:
+        embed = discord.Embed(
+            title="❌ Database Error",
+            description="Failed to remove user from blacklist. Please try again.",
+            color=0xFF4444
+        )
+        await ctx.send(embed=embed, delete_after=10)
+
+
+@bot.command(name="blist")
+async def list_blacklist(ctx):
+    """Show all blacklisted users"""
+    if not await blacklist_admin_check(ctx):
+        return
+    
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+    
+    records = await get_blacklist(ctx.guild.id)
+    
+    if not records:
+        embed = discord.Embed(
+            title="📋 Blacklist",
+            description="No users are currently blacklisted.",
+            color=0x57F287
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    # Create paginated embeds
+    embeds = []
+    items_per_page = 5
+    
+    for i in range(0, len(records), items_per_page):
+        chunk = records[i:i+items_per_page]
+        embed = discord.Embed(
+            title=f"📋 Blacklist — Page {len(embeds) + 1}",
+            color=0xFF0000
+        )
+        
+        for record in chunk:
+            user_id = record['user_id']
+            reason = record['reason']
+            blacklisted_by = record['blacklisted_by']
+            timestamp = record['blacklisted_at']
+            
+            # Try to get user info
+            try:
+                user = await bot.fetch_user(user_id)
+                user_display = f"{user}"
+            except Exception:
+                user_display = "Unknown User"
+            
+            try:
+                staff = await bot.fetch_user(blacklisted_by)
+                staff_display = f"{staff}"
+            except Exception:
+                staff_display = "Unknown Staff"
+            
+            value = (
+                f"**User ID:** `{user_id}`\n"
+                f"**Reason:** {reason}\n"
+                f"**Blacklisted By:** {staff_display}\n"
+                f"**Date:** {timestamp.strftime('%d.%m.%Y at %H:%M:%S UTC')}"
+            )
+            embed.add_field(name=user_display, value=value, inline=False)
+        
+        embed.set_footer(text=f"Total: {len(records)} user(s) • Virex Team")
+        embeds.append(embed)
+    
+    # Send first page
+    if embeds:
+        await ctx.send(embed=embeds[0])
+
+
+# ─── OTHER PREFIX COMMANDS (rest of your commands) ────────────────────────────
 @bot.command(name="manual")
 async def manual(ctx):
     if not await staff_check(ctx):
@@ -476,7 +874,6 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
         await ctx.send("❌ Ban request channel not found.", delete_after=5)
 
 
-
 @bot.tree.command(name="r6guide", description="Shows the Vega R6 setup guide")
 async def r6guide(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -486,7 +883,7 @@ async def r6guide(interaction: discord.Interaction):
     )
     embed.set_footer(text="Virex Team • virex.gg")
     await interaction.response.send_message(embed=embed)
-    
+
 
 @bot.command(name="scam")
 async def scam(ctx):
@@ -787,7 +1184,7 @@ async def giveaway_start(interaction: discord.Interaction, duration: str, winner
         "host_id": interaction.user.id,
         "ends_at": ends_at,
         "entries": set(),
-        "requirements": requirements  # stored so the embed updates correctly
+        "requirements": requirements
     }
     view = GiveawayView(msg.id)
     await msg.edit(view=view)
@@ -858,9 +1255,21 @@ async def on_command_error(ctx, error):
 
 
 # ─── START ────────────────────────────────────────────────────────────────────
-TOKEN = os.environ.get("DISCORD_TOKEN")
+async def main():
+    TOKEN = os.environ.get("DISCORD_TOKEN")
+    
+    if not TOKEN:
+        print("❌ DISCORD_TOKEN environment variable not found.")
+        return
+    
+    # Initialize database
+    db_initialized = await init_db()
+    if not db_initialized:
+        print("⚠️ Warning: Database not initialized. Some features may not work.")
+    
+    async with bot:
+        await bot.start(TOKEN)
 
-if not TOKEN:
-    print("❌ DISCORD_TOKEN environment variable not found.")
-else:
-    bot.run(TOKEN)
+
+if __name__ == "__main__":
+    asyncio.run(main())
