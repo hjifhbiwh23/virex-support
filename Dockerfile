@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy bot code
 COPY discord_bot_with_blacklist.py bot.py
-COPY .env .env 2>/dev/null || true
 
 # Run bot
 CMD ["python", "bot.py"]
