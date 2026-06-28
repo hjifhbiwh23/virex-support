@@ -1,1 +1,1 @@
-worker: python bot.py
+worker: python discord_bot_with_blacklist.py
