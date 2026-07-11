@@ -28,7 +28,7 @@ MESSAGE_LOG_CHANNEL_ID = 1524959786871820309
 
 VOUCH_CHANNEL_ID = 1502194368059146290
 
-R6_GUIDE_URL = "virexguide.com"
+R6_GUIDE_URL = "https://virexguide.com/guide"
 
 # ─── DATABASE CONFIG ──────────────────────────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL")
