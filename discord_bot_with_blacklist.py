@@ -10,29 +10,21 @@ from flask import Flask
 from threading import Thread
 import asyncpg
 import json
-
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 PREFIX = "$"
 SILENT_PREFIX = "*"
-
 BAN_REQUEST_CHANNEL_ID = 1504101352475725945
-STAFF_ROLE_NAME = "T Staff"
+STAFF_ROLE_NAME = "T Staff (not trusted)"
 BLACKLIST_ADMIN_ROLE = "Blacklist"
 APPROVE_CHANNEL_ID = 1504531328731709540
 POST_CHANNEL_ID = 1502194708993146921
-
 CHANGELOG_CHANNEL_ID = 1524959757499371620
 CUSTOMER_ROLE_NAME = "customer"
-
 MESSAGE_LOG_CHANNEL_ID = 1524959786871820309
-
 VOUCH_CHANNEL_ID = 1502194368059146290
-
 R6_GUIDE_URL = "https://virexguide.com/guide"
-
 # ─── DATABASE CONFIG ──────────────────────────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
 # ─── PRODUCT STATUS ───────────────────────────────────────────────────────────
 product_status: dict[str, str] = {
     "Lethal Lite":       "Testing",
@@ -51,7 +43,6 @@ product_status: dict[str, str] = {
     "PREDATOR":          "Online",
     "ONYX SPOOFER":      "Online",
 }
-
 STATUS_DOTS = {
     "Undetected": "🟢",
     "Online":     "🟢",
@@ -60,7 +51,6 @@ STATUS_DOTS = {
     "Detected":   "🔴",
     "Offline":    "⚫",
 }
-
 STATUS_COLORS = {
     "Undetected": 0x57F287,
     "Online":     0x57F287,
@@ -69,7 +59,6 @@ STATUS_COLORS = {
     "Detected":   0xED4245,
     "Offline":    0x95A5A6,
 }
-
 # ─── WORD FILTER ──────────────────────────────────────────────────────────────
 BLACKLISTED_WORDS = [
     "spoof", "spoofed", "spoofer", "spoofing",
@@ -78,40 +67,30 @@ BLACKLISTED_WORDS = [
     "aimbot", "wallhack", "esp", "triggerbot",
     "bypass", "injector", "inject",
 ]
-
 # ─── VOUCH COUNTER ────────────────────────────────────────────────────────────
 vouch_counter: int = 1
-
 # ─── BOT SETUP ────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
-
 bot = commands.Bot(
     command_prefix=PREFIX,
     intents=intents,
     help_command=None
 )
-
 active_giveaways: dict = {}
 db_pool: asyncpg.Pool = None
-
 # ─── IN-MEMORY WHITELIST CACHE ────────────────────────────────────────────────
 # Loaded from DB on startup — avoids a DB query on every single message
 whitelist_cache: set[int] = set()
-
 # ─── HTTP SERVER ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
-
 @app.route('/guide')
 def serve_guide():
     with open('index.html', 'r', encoding='utf-8') as f:
         return f.read()
-
 def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False)
-
-
 # ─── DATABASE HELPERS ─────────────────────────────────────────────────────────
 async def init_db():
     global db_pool
@@ -151,8 +130,6 @@ async def init_db():
     except Exception as e:
         print(f"❌ Database error: {e}")
         return False
-
-
 # ── Blacklist DB helpers ───────────────────────────────────────────────────────
 async def add_to_blacklist(user_id: int, reason: str, staff_id: int, guild_id: int) -> bool:
     if not db_pool:
@@ -169,7 +146,6 @@ async def add_to_blacklist(user_id: int, reason: str, staff_id: int, guild_id: i
     except Exception as e:
         print(f"❌ Error adding to blacklist: {e}")
         return False
-
 async def remove_from_blacklist(user_id: int) -> bool:
     if not db_pool:
         return False
@@ -180,7 +156,6 @@ async def remove_from_blacklist(user_id: int) -> bool:
     except Exception as e:
         print(f"❌ Error removing from blacklist: {e}")
         return False
-
 async def is_blacklisted(user_id: int) -> bool:
     if not db_pool:
         return False
@@ -191,7 +166,6 @@ async def is_blacklisted(user_id: int) -> bool:
     except Exception as e:
         print(f"❌ Error checking blacklist: {e}")
         return False
-
 async def get_blacklist(guild_id: int) -> list:
     if not db_pool:
         return []
@@ -205,7 +179,6 @@ async def get_blacklist(guild_id: int) -> list:
     except Exception as e:
         print(f"❌ Error fetching blacklist: {e}")
         return []
-
 async def get_blacklist_entry(user_id: int) -> dict:
     if not db_pool:
         return None
@@ -219,8 +192,6 @@ async def get_blacklist_entry(user_id: int) -> dict:
     except Exception as e:
         print(f"❌ Error fetching blacklist entry: {e}")
         return None
-
-
 # ── Whitelist DB helpers ───────────────────────────────────────────────────────
 async def db_add_whitelist(user_id: int, staff_id: int, guild_id: int) -> bool:
     if not db_pool:
@@ -237,7 +208,6 @@ async def db_add_whitelist(user_id: int, staff_id: int, guild_id: int) -> bool:
     except Exception as e:
         print(f"❌ Error adding to whitelist: {e}")
         return False
-
 async def db_remove_whitelist(user_id: int) -> bool:
     if not db_pool:
         return False
@@ -249,7 +219,6 @@ async def db_remove_whitelist(user_id: int) -> bool:
     except Exception as e:
         print(f"❌ Error removing from whitelist: {e}")
         return False
-
 async def db_load_whitelist() -> set[int]:
     """Load all whitelisted user IDs into the in-memory cache on startup."""
     if not db_pool:
@@ -261,7 +230,6 @@ async def db_load_whitelist() -> set[int]:
     except Exception as e:
         print(f"❌ Error loading whitelist: {e}")
         return set()
-
 async def db_get_whitelist(guild_id: int) -> list:
     if not db_pool:
         return []
@@ -274,28 +242,21 @@ async def db_get_whitelist(guild_id: int) -> list:
     except Exception as e:
         print(f"❌ Error fetching whitelist: {e}")
         return []
-
-
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
 def has_staff_role(user: discord.Member) -> bool:
     return STAFF_ROLE_NAME.lower() in [r.name.lower() for r in user.roles]
-
 def has_blacklist_admin_role(user: discord.Member) -> bool:
     return BLACKLIST_ADMIN_ROLE.lower() in [r.name.lower() for r in user.roles]
-
 def has_customer_role(user: discord.Member) -> bool:
     return CUSTOMER_ROLE_NAME.lower() in [r.name.lower() for r in user.roles]
-
 def parse_duration(duration_str: str) -> int | None:
     match = re.fullmatch(r"(\d+)([smhd])", duration_str.strip().lower())
     if not match:
         return None
     value, unit = int(match.group(1)), match.group(2)
     return value * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
-
 def build_giveaway_embed(prize, winners, host_id, ends_at, entries, requirements=None) -> discord.Embed:
     description = (
         f"Click **🎉 Enter** to participate!\n\n"
@@ -309,7 +270,6 @@ def build_giveaway_embed(prize, winners, host_id, ends_at, entries, requirements
     embed = discord.Embed(title=f"🎉 GIVEAWAY — {prize}", description=description, color=0xFF73FA)
     embed.set_footer(text=f"Ends on {ends_at.strftime('%d.%m.%Y at %H:%M')} UTC")
     return embed
-
 def build_status_embed() -> discord.Embed:
     embed = discord.Embed(title="📊 Current Product Status", color=0x6f2cff, timestamp=utcnow())
     items = list(product_status.items())
@@ -325,14 +285,12 @@ def build_status_embed() -> discord.Embed:
         embed.add_field(name="\u200b", value=field_value.strip(), inline=True)
     embed.set_footer(text="Last updated")
     return embed
-
 def check_blacklist(content: str) -> str | None:
     cleaned = re.sub(r"[*_~`|>\\]", "", content.lower())
     for word in BLACKLISTED_WORDS:
         if re.search(rf"\b{re.escape(word)}", cleaned):
             return word
     return None
-
 async def log_deleted_message(message: discord.Message, matched_word: str):
     log_channel = bot.get_channel(MESSAGE_LOG_CHANNEL_ID)
     if not log_channel:
@@ -349,7 +307,6 @@ async def log_deleted_message(message: discord.Message, matched_word: str):
     embed.set_thumbnail(url=message.author.display_avatar.url)
     embed.set_footer(text=f"User ID: {message.author.id}")
     await log_channel.send(embed=embed)
-
 async def staff_check(ctx) -> bool:
     if not has_staff_role(ctx.author):
         embed = discord.Embed(title="❌ No Permission", description="You need at least the **T Staff** role to use this command.", color=0xFF4444)
@@ -360,7 +317,6 @@ async def staff_check(ctx) -> bool:
             pass
         return False
     return True
-
 async def blacklist_admin_check(ctx) -> bool:
     if not has_blacklist_admin_role(ctx.author):
         embed = discord.Embed(title="❌ No Permission", description=f"You need the **{BLACKLIST_ADMIN_ROLE}** role to use this command.", color=0xFF4444)
@@ -371,7 +327,6 @@ async def blacklist_admin_check(ctx) -> bool:
             pass
         return False
     return True
-
 async def end_giveaway(message_id: int):
     if message_id not in active_giveaways:
         return
@@ -398,32 +353,25 @@ async def end_giveaway(message_id: int):
     embed.set_footer(text="Giveaway ended")
     await msg.edit(embed=embed, view=None)
     await channel.send(f"🎉 Congratulations {winner_mentions}! You won **{prize}**!")
-
-
 # ─── EVENTS ───────────────────────────────────────────────────────────────────
 @bot.event
 async def on_ready():
     global vouch_counter, whitelist_cache
     print(f"✅ Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Game(name="virex.gg | $manual"))
-
     # Load whitelist from database into memory
     whitelist_cache = await db_load_whitelist()
     print(f"✅ Whitelist cache loaded: {len(whitelist_cache)} user(s)")
-
     try:
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} slash command(s)")
     except Exception as e:
         print(f"❌ Failed to sync commands: {e}")
-
     if not hasattr(bot, 'flask_started'):
         flask_thread = Thread(target=run_flask, daemon=True)
         flask_thread.start()
         bot.flask_started = True
         print("✅ Flask HTTP server started on port 8080")
-
-
 @bot.event
 async def on_member_join(member: discord.Member):
     if await is_blacklisted(member.id):
@@ -439,13 +387,10 @@ async def on_member_join(member: discord.Member):
                 await log_channel.send(embed=embed)
         except Exception as e:
             print(f"❌ Error auto-banning {member.id}: {e}")
-
-
 @bot.event
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
-
     if message.content.startswith(SILENT_PREFIX):
         if not has_staff_role(message.author):
             return
@@ -457,11 +402,9 @@ async def on_message(message: discord.Message):
         if content:
             await message.channel.send(content)
         return
-
     is_staff      = has_staff_role(message.author)
     # ── Whitelist check: whitelisted users bypass the word filter completely ──
     is_whitelisted = message.author.id in whitelist_cache
-
     if not is_staff and not is_whitelisted:
         matched = check_blacklist(message.content)
         if matched:
@@ -469,7 +412,6 @@ async def on_message(message: discord.Message):
                 await message.delete()
             except discord.Forbidden:
                 pass
-
             warn_embed = discord.Embed(
                 title="⚠️ Message Removed",
                 description=(
@@ -491,13 +433,9 @@ async def on_message(message: discord.Message):
                 )
             except discord.Forbidden:
                 pass
-
             await log_deleted_message(message, matched)
             return
-
     await bot.process_commands(message)
-
-
 # ─── PREFIX COMMANDS ──────────────────────────────────────────────────────────
 @bot.command(name="commands")
 async def commands_list(ctx):
@@ -513,6 +451,7 @@ async def commands_list(ctx):
         value=(
             "`$commands` — Shows this command list\n"
             "`$manual` — AnyDesk manual guide\n"
+            "`$msinfo` — msinfo32 fix info (€10 manual)\n"
             "`$activate` — Windows activation guide\n"
             "`$tempvsperm` — Temp vs Perm Woofer info\n"
             "`$proof` — Purchase proof instructions\n"
@@ -546,8 +485,6 @@ async def commands_list(ctx):
     embed.add_field(name="🔇 Silent Prefix (`*`)", value="`*<text>` — Send a message anonymously", inline=False)
     embed.set_footer(text="All staff commands require the T Staff role • Virex Team")
     await ctx.send(embed=embed)
-
-
 # ─── BLACKLIST PREFIX COMMANDS ────────────────────────────────────────────────
 @bot.command(name="blacklist")
 async def blacklist_user(ctx, user_id: str = None, *, reason: str = None):
@@ -596,8 +533,6 @@ async def blacklist_user(ctx, user_id: str = None, *, reason: str = None):
         await ctx.send(embed=embed)
     else:
         await ctx.send(embed=discord.Embed(title="❌ Database Error", description="Failed to add user to blacklist.", color=0xFF4444), delete_after=10)
-
-
 @bot.command(name="unblacklist")
 async def unblacklist_user(ctx, user_id: str = None):
     if not await blacklist_admin_check(ctx):
@@ -637,8 +572,6 @@ async def unblacklist_user(ctx, user_id: str = None):
         await ctx.send(embed=embed)
     else:
         await ctx.send(embed=discord.Embed(title="❌ Database Error", description="Failed to remove user from blacklist.", color=0xFF4444), delete_after=10)
-
-
 @bot.command(name="blist")
 async def list_blacklist(ctx):
     if not await blacklist_admin_check(ctx):
@@ -678,8 +611,6 @@ async def list_blacklist(ctx):
         embeds.append(embed)
     if embeds:
         await ctx.send(embed=embeds[0])
-
-
 # ─── OTHER PREFIX COMMANDS ────────────────────────────────────────────────────
 @bot.command(name="manual")
 async def manual(ctx):
@@ -694,8 +625,43 @@ async def manual(ctx):
     embed.add_field(name="⚠️ Note", value="This is different from the ASUS Manual.", inline=False)
     embed.set_footer(text="Virex Team")
     await ctx.send(embed=embed)
-
-
+@bot.command(name="msinfo")
+async def msinfo(ctx):
+    if not await staff_check(ctx):
+        return
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+    embed = discord.Embed(
+        title="🛠️ msinfo32 Fix — Manual Assistance",
+        description=(
+            "If your **msinfo32** (System Information) is not working, showing "
+            "errors, or won't open correctly, our staff can fix it for you."
+        ),
+        color=0x5865F2
+    )
+    embed.add_field(
+        name="💰 Price",
+        value="This manual fix is available for **€10**.",
+        inline=False
+    )
+    embed.add_field(
+        name="🧑‍🔧 What We Do",
+        value=(
+            "- Repair / restore your msinfo32\n"
+            "- Make sure it opens and displays correctly\n"
+            "- Done manually by a Staff member *(NOT Trial Staff)* via **AnyDesk**"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="📋 How to Get It",
+        value="Open a support ticket and let a Staff member know you want the **msinfo32 fix**.",
+        inline=False
+    )
+    embed.set_footer(text="Virex Team")
+    await ctx.send(embed=embed)
 @bot.command(name="activate")
 async def activate(ctx):
     if not await staff_check(ctx):
@@ -707,13 +673,11 @@ async def activate(ctx):
     embed = discord.Embed(title="🪟 Windows Activation Guide", description="Follow the steps below to activate Windows.", color=0x00B4D8)
     embed.add_field(name="1️⃣ Open PowerShell as Administrator", value="Press Windows → type `PowerShell` → Run as Administrator", inline=False)
     embed.add_field(name="2️⃣ Run this command", value="```irm https://get.activated.win/ | iex```", inline=False)
-    embed.add_field(name="3️⃣ Press `4`", value="​", inline=True)
-    embed.add_field(name="4️⃣ Activate Windows → `1`", value="​", inline=True)
-    embed.add_field(name="5️⃣ Auto-Renewal → `5`", value="​", inline=True)
+    embed.add_field(name="3️⃣ Press `4`", value="", inline=True)
+    embed.add_field(name="4️⃣ Activate Windows → `1`", value="", inline=True)
+    embed.add_field(name="5️⃣ Auto-Renewal → `5`", value="", inline=True)
     embed.set_footer(text="Virex Team")
     await ctx.send(embed=embed)
-
-
 @bot.command(name="tempvsperm")
 async def tempvsperm(ctx):
     if not await staff_check(ctx):
@@ -727,8 +691,6 @@ async def tempvsperm(ctx):
     embed.add_field(name="⏳ Temporary Woofer", value="- Lasts one session\n- Resets after restart\n- No reinstall needed", inline=False)
     embed.set_footer(text="Virex Team")
     await ctx.send(embed=embed)
-
-
 @bot.command(name="proof")
 async def proof(ctx):
     if not await staff_check(ctx):
@@ -743,8 +705,6 @@ async def proof(ctx):
     embed.add_field(name="⚠️ Important", value="Fake screenshots = permanent ban.", inline=False)
     embed.set_footer(text="Virex Team")
     await ctx.send(embed=embed)
-
-
 @bot.command(name="ban")
 async def ban_request(ctx, user_id: str = None, *, reason: str = None):
     if not await staff_check(ctx):
@@ -776,8 +736,6 @@ async def ban_request(ctx, user_id: str = None, *, reason: str = None):
         await ctx.send(embed=discord.Embed(title="✅ Ban Request Sent", description=f"Request sent to {ban_channel.mention}", color=0x00FF00), delete_after=5)
     else:
         await ctx.send("❌ Ban request channel not found.", delete_after=5)
-
-
 @bot.command(name="scam")
 async def scam(ctx):
     if not await staff_check(ctx):
@@ -803,8 +761,6 @@ async def scam(ctx):
     embed.set_image(url="https://i.imgur.com/t1JeHvA.png")
     embed.set_footer(text="Virex Team")
     await ctx.send(content="@everyone @here", embed=embed)
-
-
 @bot.command(name="anydesk")
 async def anydesk(ctx):
     if not await staff_check(ctx):
@@ -829,15 +785,12 @@ async def anydesk(ctx):
     )
     embed.set_footer(text="Virex Team")
     await ctx.send(embed=embed)
-
-
 # ─── APPROVE VIEW ─────────────────────────────────────────────────────────────
 class ApproveView(discord.ui.View):
     def __init__(self, link: str, author: discord.Member):
         super().__init__(timeout=300)
         self.link   = link
         self.author = author
-
     @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.green)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not has_staff_role(interaction.user):
@@ -858,7 +811,6 @@ class ApproveView(discord.ui.View):
             child.disabled = True
         await interaction.message.edit(view=self)
         await interaction.response.send_message("✅ Post approved and sent.", ephemeral=True)
-
     @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.red)
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not has_staff_role(interaction.user):
@@ -868,8 +820,6 @@ class ApproveView(discord.ui.View):
             child.disabled = True
         await interaction.message.edit(view=self)
         await interaction.response.send_message("🚫 Post denied.", ephemeral=True)
-
-
 # ─── SLASH COMMANDS ───────────────────────────────────────────────────────────
 @bot.tree.command(name="post", description="Submit a video for approval")
 @app_commands.describe(link="Video link to submit")
@@ -885,8 +835,6 @@ async def post(interaction: discord.Interaction, link: str):
     embed.set_footer(text=f"Submitted by {interaction.user}")
     await approve_channel.send(embed=embed, view=ApproveView(link, interaction.user))
     await interaction.response.send_message("✅ Your post has been submitted for approval.", ephemeral=True)
-
-
 @bot.tree.command(name="changelog", description="Post a game update to the changelog channel")
 @app_commands.describe(game="Name of the game that was updated", update="Description of what changed")
 async def changelog(interaction: discord.Interaction, game: str, update: str):
@@ -903,8 +851,6 @@ async def changelog(interaction: discord.Interaction, game: str, update: str):
     ping_content = customer_role.mention if customer_role else f"@{CUSTOMER_ROLE_NAME}"
     await changelog_channel.send(content=ping_content, embed=embed)
     await interaction.response.send_message(f"✅ Changelog for **{game}** has been posted!", ephemeral=True)
-
-
 @bot.tree.command(name="r6guide", description="Shows the Vega R6 setup guide")
 async def r6guide(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -914,14 +860,10 @@ async def r6guide(interaction: discord.Interaction):
     )
     embed.set_footer(text="Virex Team • virex.gg")
     await interaction.response.send_message(embed=embed)
-
-
 # ─── STATUS COMMANDS ──────────────────────────────────────────────────────────
 @bot.tree.command(name="status", description="Show the current product status")
 async def status(interaction: discord.Interaction):
     await interaction.response.send_message(embed=build_status_embed())
-
-
 @bot.tree.command(name="setstatus", description="Manually set a product's status (Staff only)")
 @app_commands.describe(product="Product name (e.g. CRUSADER, ONYX FN)", new_status="New status to set")
 @app_commands.choices(new_status=[
@@ -954,8 +896,6 @@ async def setstatus(interaction: discord.Interaction, product: str, new_status: 
     )
     embed.set_footer(text=f"Updated by {interaction.user} • Virex Team")
     await interaction.response.send_message(embed=embed)
-
-
 # ─── WHITELIST SLASH COMMANDS ─────────────────────────────────────────────────
 @bot.tree.command(name="whitelist", description="Whitelist a user — they can write any word without the filter blocking them (Staff only)")
 @app_commands.describe(member="The user to whitelist")
@@ -963,7 +903,6 @@ async def cmd_whitelist(interaction: discord.Interaction, member: discord.Member
     if not has_staff_role(interaction.user):
         await interaction.response.send_message("❌ You need the **T Staff** role to use this command.", ephemeral=True)
         return
-
     if member.id in whitelist_cache:
         embed = discord.Embed(
             title="⚠️ Already Whitelisted",
@@ -972,7 +911,6 @@ async def cmd_whitelist(interaction: discord.Interaction, member: discord.Member
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
-
     success = await db_add_whitelist(member.id, interaction.user.id, interaction.guild.id)
     if success:
         embed = discord.Embed(
@@ -988,15 +926,12 @@ async def cmd_whitelist(interaction: discord.Interaction, member: discord.Member
         await interaction.response.send_message(embed=embed)
     else:
         await interaction.response.send_message("❌ Database error. Failed to whitelist user.", ephemeral=True)
-
-
 @bot.tree.command(name="unwhitelist", description="Remove a user from the whitelist (Staff only)")
 @app_commands.describe(member="The user to remove from the whitelist")
 async def cmd_unwhitelist(interaction: discord.Interaction, member: discord.Member):
     if not has_staff_role(interaction.user):
         await interaction.response.send_message("❌ You need the **T Staff** role to use this command.", ephemeral=True)
         return
-
     if member.id not in whitelist_cache:
         embed = discord.Embed(
             title="⚠️ Not Whitelisted",
@@ -1005,7 +940,6 @@ async def cmd_unwhitelist(interaction: discord.Interaction, member: discord.Memb
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
-
     success = await db_remove_whitelist(member.id)
     if success:
         embed = discord.Embed(
@@ -1020,16 +954,12 @@ async def cmd_unwhitelist(interaction: discord.Interaction, member: discord.Memb
         await interaction.response.send_message(embed=embed)
     else:
         await interaction.response.send_message("❌ Database error. Failed to remove user from whitelist.", ephemeral=True)
-
-
 @bot.tree.command(name="whitelistview", description="Show all whitelisted users (Staff only)")
 async def cmd_whitelistview(interaction: discord.Interaction):
     if not has_staff_role(interaction.user):
         await interaction.response.send_message("❌ You need the **T Staff** role to use this command.", ephemeral=True)
         return
-
     records = await db_get_whitelist(interaction.guild.id)
-
     if not records:
         embed = discord.Embed(
             title="📋 Whitelist",
@@ -1038,7 +968,6 @@ async def cmd_whitelistview(interaction: discord.Interaction):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
-
     lines = []
     for record in records:
         try:
@@ -1053,7 +982,6 @@ async def cmd_whitelistview(interaction: discord.Interaction):
             staff_display = "Unknown"
         ts = record['whitelisted_at'].strftime("%d.%m.%Y %H:%M")
         lines.append(f"• {user_display} (`{record['user_id']}`) — added by **{staff_display}** on {ts}")
-
     embed = discord.Embed(
         title=f"📋 Whitelist — {len(records)} user(s)",
         description="\n".join(lines),
@@ -1061,8 +989,6 @@ async def cmd_whitelistview(interaction: discord.Interaction):
     )
     embed.set_footer(text="These users bypass the word filter • Virex Team")
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 # ─── VOUCH COMMAND ────────────────────────────────────────────────────────────
 @bot.tree.command(name="vouch", description="Leave a vouch for Virex (customers only)")
 @app_commands.describe(stars="Your rating (1–5 stars)", message="Your vouch message")
@@ -1095,14 +1021,11 @@ async def vouch(interaction: discord.Interaction, stars: int, message: str):
     embed.set_footer(text=f"Vouched by {interaction.user} • Virex Team")
     await vouch_channel.send(content=f"Vouched by: {interaction.user.mention}", embed=embed)
     await interaction.response.send_message("✅ Your vouch has been submitted, thank you!", ephemeral=True)
-
-
 # ─── GIVEAWAY VIEW ────────────────────────────────────────────────────────────
 class GiveawayView(discord.ui.View):
     def __init__(self, message_id: int):
         super().__init__(timeout=None)
         self.message_id = message_id
-
     @discord.ui.button(label="🎉 Enter", style=discord.ButtonStyle.primary, custom_id="giveaway_join")
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.message_id not in active_giveaways:
@@ -1121,8 +1044,6 @@ class GiveawayView(discord.ui.View):
             await interaction.message.edit(embed=embed)
         except Exception:
             pass
-
-
 # ─── GIVEAWAY SLASH COMMANDS ──────────────────────────────────────────────────
 @bot.tree.command(name="giveaway", description="Start a giveaway")
 @app_commands.describe(duration="Duration e.g. 10m, 2h, 1d", winners="Number of winners", prize="What is being given away?", requirements="Optional requirements to enter")
@@ -1153,13 +1074,9 @@ async def giveaway_start(interaction: discord.Interaction, duration: str, winner
     view = GiveawayView(msg.id)
     await msg.edit(view=view)
     asyncio.create_task(_giveaway_timer(msg.id, seconds))
-
-
 async def _giveaway_timer(message_id: int, seconds: int):
     await asyncio.sleep(seconds)
     await end_giveaway(message_id)
-
-
 @bot.tree.command(name="gend", description="End a giveaway immediately (by message ID)")
 @app_commands.describe(message_id="The message ID of the giveaway embed")
 async def giveaway_end(interaction: discord.Interaction, message_id: str):
@@ -1176,8 +1093,6 @@ async def giveaway_end(interaction: discord.Interaction, message_id: str):
         return
     await interaction.response.send_message("✅ Ending giveaway...", ephemeral=True)
     await end_giveaway(mid)
-
-
 @bot.tree.command(name="greroll", description="Reroll a winner from a giveaway embed")
 @app_commands.describe(channel="The channel where the giveaway was held", message_id="The message ID of the giveaway embed")
 async def giveaway_reroll(interaction: discord.Interaction, channel: discord.TextChannel, message_id: str):
@@ -1205,8 +1120,6 @@ async def giveaway_reroll(interaction: discord.Interaction, channel: discord.Tex
         return
     await channel.send(f"🔁 Reroll! The new winner of **{prize}** is <@{new_winner}>! Congratulations!")
     await interaction.response.send_message(f"✅ Rerolled! New winner: <@{new_winner}>", ephemeral=True)
-
-
 # ─── ERROR HANDLING ───────────────────────────────────────────────────────────
 @bot.event
 async def on_command_error(ctx, error):
@@ -1216,8 +1129,6 @@ async def on_command_error(ctx, error):
         await ctx.send("❌ Missing arguments.", delete_after=5)
         return
     print(f"[ERROR] {error}")
-
-
 # ─── START ────────────────────────────────────────────────────────────────────
 async def main():
     TOKEN = os.environ.get("DISCORD_TOKEN")
@@ -1229,7 +1140,5 @@ async def main():
         print("⚠️ Warning: Database not initialized. Some features may not work.")
     async with bot:
         await bot.start(TOKEN)
-
-
 if __name__ == "__main__":
     asyncio.run(main())
