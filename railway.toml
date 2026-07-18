@@ -1,3 +1,0 @@
-[deploy]
-startCommand = "python discord_bot_with_blacklist.py"
-region = "us-west2"
