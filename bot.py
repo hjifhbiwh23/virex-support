@@ -293,7 +293,7 @@ class TicketSelect(discord.ui.Select):
             description=desc_map.get(category_type, f"Welcome {user.mention}! Staff will assist you shortly."),
             color=EMBED_COLOR
         )
-        embed.set_footer(text="Expand By Legacy™ • Esports Ticket System")
+        embed.set_footer(text="R4S • Esports Ticket System")
 
         await ticket_channel.send(content=f"{user.mention} Welcome!", embed=embed, view=TicketControlView())
         await interaction.response.send_message(f"✅ Ticket created! Head over to {ticket_channel.mention}", ephemeral=True)
@@ -346,7 +346,7 @@ async def on_member_join(member: discord.Member):
             ),
             color=EMBED_COLOR
         )
-        dm_embed.set_footer(text=f"Expand By Legacy™ • Member #{member.guild.member_count}")
+        dm_embed.set_footer(text=f"R4S • Member #{member.guild.member_count}")
         await member.send(embed=dm_embed)
     except Exception as e:
         print(f"[DM WELCOME FAILED] Could not send DM to {member}: {e}")
@@ -374,7 +374,7 @@ async def on_message(message: discord.Message):
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_tickets(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="🏆 Expand By Legacy™ • Support & Applications",
+        title="🏆 R4S (Reach 4 Stars) • Support & Applications",
         description=(
             "Need help or want to join our esports roster?\n"
             "Select an option from the menu below to open a private ticket channel.\n\n"
@@ -384,16 +384,16 @@ async def setup_tickets(interaction: discord.Interaction):
         ),
         color=EMBED_COLOR
     )
-    embed.set_footer(text="Expand By Legacy™ • Official Esports Bot")
+    embed.set_footer(text="R4S • Official Esports Bot")
     await interaction.channel.send(embed=embed, view=TicketLaunchView())
     await interaction.response.send_message("✅ Ticket panel created successfully!", ephemeral=True)
 
 @bot.tree.command(name="rules", description="Display server guidelines and rules")
 async def rules_command(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="📜 Server Guidelines & Rules • Expand By Legacy™",
+        title="📜 Server Guidelines & Rules • R4S",
         description=(
-            "Welcome to **Expand By Legacy™**! Please follow these guidelines to ensure a competitive and safe environment:\n\n"
+            "Welcome to **R4S (Reach 4 Stars)**! Please follow these guidelines to ensure a competitive and safe environment:\n\n"
             "**1. Respect Everyone**\nNo toxicity, hate speech, racism, or unnecessary harassment.\n\n"
             "**2. Competitive Integrity**\nNo cheating, exploiting, or teaming in scrims/tournaments.\n\n"
             "**3. No Self-Promotion**\nDo not post stream/social links outside of designated promo channels.\n\n"
@@ -402,7 +402,7 @@ async def rules_command(interaction: discord.Interaction):
         ),
         color=EMBED_COLOR
     )
-    embed.set_footer(text="Expand By Legacy™ • Play Fair & Grind Hard")
+    embed.set_footer(text="R4S • Play Fair & Grind Hard")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="kick", description="Kick a member from the server")
