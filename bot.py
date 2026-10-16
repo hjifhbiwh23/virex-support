@@ -37,8 +37,20 @@ DATA_FILE = DATA_DIR / "data.json"
 log = logging.getLogger("schlumpf")
 
 
+BOT_OWNER_ID = 643645298819858464  # nur diese Person darf die wichtigen Befehle benutzen
+
+
 class BotError(commands.CommandError):
     """Fehler, dessen Text direkt dem Nutzer angezeigt wird."""
+
+
+def only_owner():
+    """Befehl darf nur von BOT_OWNER_ID benutzt werden."""
+    async def predicate(ctx):
+        if ctx.author.id != BOT_OWNER_ID:
+            raise BotError("Diesen Befehl darf nur der Bot-Besitzer benutzen. 🔒")
+        return True
+    return commands.check(predicate)
 
 
 def embed(title: str, desc: str = "", color: int = EMBED_COLOR) -> discord.Embed:
@@ -254,28 +266,28 @@ class Server(commands.Cog, name="Server"):
 
     # ------------------------------------------------------------ Setup
     @commands.hybrid_command(name="setwillkommen", description="Willkommen-Kanal festlegen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def setwillkommen(self, ctx, kanal: discord.TextChannel):
         self.g(ctx.guild)["welcome_channel"] = kanal.id
         self.store.save()
         await ctx.send(f"✅ Willkommen-Kanal: {kanal.mention}")
 
     @commands.hybrid_command(name="setgoodbye", description="Verlassen-Kanal festlegen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def setgoodbye(self, ctx, kanal: discord.TextChannel):
         self.g(ctx.guild)["goodbye_channel"] = kanal.id
         self.store.save()
         await ctx.send(f"✅ Verlassen-Kanal: {kanal.mention}")
 
     @commands.hybrid_command(name="setlog", description="Mod-Log-Kanal festlegen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def setlog(self, ctx, kanal: discord.TextChannel):
         self.g(ctx.guild)["log_channel"] = kanal.id
         self.store.save()
         await ctx.send(f"✅ Log-Kanal: {kanal.mention}")
 
     @commands.hybrid_command(name="setautorolle", description="Rolle für neue Mitglieder festlegen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def setautorolle(self, ctx, rolle: discord.Role):
         if rolle >= ctx.guild.me.top_role:
             raise BotError("Diese Rolle liegt über meiner. Schiebe meine Rolle weiter nach oben.")
@@ -285,20 +297,20 @@ class Server(commands.Cog, name="Server"):
 
     @commands.hybrid_command(name="willkommentext",
                              description="Eigener Willkommenstext ({user} {server} {count})")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def willkommentext(self, ctx, *, text: str):
         self.g(ctx.guild)["welcome_text"] = text
         self.store.save()
         await ctx.send("✅ Willkommenstext gespeichert. Teste ihn mit `!willkommentest`.")
 
     @commands.hybrid_command(name="willkommentest", description="Willkommensnachricht testen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def willkommentest(self, ctx):
         await self.send_welcome(ctx.author)
         await ctx.send("✅ Test gesendet.", ephemeral=True)
 
     @commands.hybrid_command(name="einstellungen", description="Aktuelle Bot-Einstellungen anzeigen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def einstellungen(self, ctx):
         g = self.g(ctx.guild)
 
@@ -318,7 +330,7 @@ class Server(commands.Cog, name="Server"):
     # ----------------------------------------------------- Reaktionsrollen
     @commands.hybrid_command(name="reaktionsrolle",
                              description="Reaktionsrolle für eine Nachricht (in diesem Kanal) anlegen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def reaktionsrolle(self, ctx, nachricht_id: str, emoji: str, rolle: discord.Role):
         if rolle >= ctx.guild.me.top_role:
             raise BotError("Diese Rolle liegt über meiner.")
@@ -335,7 +347,7 @@ class Server(commands.Cog, name="Server"):
         await ctx.send(f"✅ Wer mit {emoji} reagiert, bekommt {rolle.mention}.")
 
     @commands.hybrid_command(name="reaktionsrolle_entfernen", description="Reaktionsrolle löschen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def reaktionsrolle_entfernen(self, ctx, nachricht_id: str, emoji: str):
         if self.g(ctx.guild)["reaction_roles"].pop(f"{nachricht_id}:{emoji}", None) is None:
             raise BotError("Diese Reaktionsrolle gibt es nicht.")
@@ -462,7 +474,7 @@ class Moderation(commands.Cog, name="Moderation"):
 
     # -------------------------------------------------------- Moderation
     @commands.hybrid_command(name="kick", description="Mitglied kicken")
-    @commands.has_permissions(kick_members=True)
+    @only_owner()
     @commands.bot_has_permissions(kick_members=True)
     async def kick(self, ctx, mitglied: discord.Member, *, grund: str = "Kein Grund angegeben"):
         can_moderate(ctx, mitglied)
@@ -470,7 +482,7 @@ class Moderation(commands.Cog, name="Moderation"):
         await self.done(ctx, "👢 Kick", f"**{mitglied}** wurde gekickt.\n**Grund:** {grund}", YELLOW)
 
     @commands.hybrid_command(name="ban", description="Nutzer bannen (auch per ID)")
-    @commands.has_permissions(ban_members=True)
+    @only_owner()
     @commands.bot_has_permissions(ban_members=True)
     async def ban(self, ctx, nutzer: discord.User, *, grund: str = "Kein Grund angegeben"):
         member = ctx.guild.get_member(nutzer.id)
@@ -480,7 +492,7 @@ class Moderation(commands.Cog, name="Moderation"):
         await self.done(ctx, "🔨 Ban", f"**{nutzer}** wurde gebannt.\n**Grund:** {grund}", RED)
 
     @commands.hybrid_command(name="unban", description="Nutzer per ID entbannen")
-    @commands.has_permissions(ban_members=True)
+    @only_owner()
     @commands.bot_has_permissions(ban_members=True)
     async def unban(self, ctx, nutzer_id: str):
         try:
@@ -737,7 +749,7 @@ class Calls(commands.Cog, name="Calls"):
         await ctx.send(f"✅ Dein Call: {ch.mention} – komm rein! (Wird gelöscht, wenn niemand in 60 Sek. beitritt.)")
 
     @call.command(name="setup", description="Call-System einrichten (erstellt Kategorie + Hub)")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     @commands.bot_has_permissions(manage_channels=True)
     async def call_setup(self, ctx):
         cat = await ctx.guild.create_category("📞 Calls")
@@ -748,7 +760,7 @@ class Calls(commands.Cog, name="Calls"):
                        "Verschiebe Kategorie/Hub gern an die gewünschte Stelle.")
 
     @call.command(name="hub", description="Vorhandenen Sprachkanal als Call-Hub festlegen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def call_hub(self, ctx, kanal: discord.VoiceChannel):
         self.g(ctx.guild)["call_hub"] = kanal.id
         self.store.save()
@@ -965,7 +977,7 @@ class Tickets(commands.Cog, name="Tickets"):
                                    "`!ticket schliessen` – Ticket schließen"))
 
     @ticket.command(name="setup", description="Ticket-Panel in diesem Kanal erstellen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     @commands.bot_has_permissions(manage_channels=True)
     async def ticket_setup(self, ctx, kategorie: discord.CategoryChannel = None, supportrolle: discord.Role = None):
         g = self.store.guild(ctx.guild.id)
@@ -979,7 +991,7 @@ class Tickets(commands.Cog, name="Tickets"):
         await ctx.send("✅ Ticket-Panel erstellt.", ephemeral=True)
 
     @ticket.command(name="log", description="Kanal für Ticket-Transkripte festlegen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def ticket_log(self, ctx, kanal: discord.TextChannel):
         self.store.guild(ctx.guild.id)["ticket_log"] = kanal.id
         self.store.save()
@@ -1084,7 +1096,7 @@ class Levels(commands.Cog, name="Levels"):
         await ctx.send(embed=embed("🏆 Rangliste", "\n".join(lines)), allowed_mentions=discord.AllowedMentions.none())
 
     @commands.hybrid_command(name="levelrolle", description="Rolle ab einem bestimmten Level vergeben")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def levelrolle(self, ctx, level: commands.Range[int, 1, 500], rolle: discord.Role):
         if rolle >= ctx.guild.me.top_role:
             raise BotError("Diese Rolle liegt über meiner.")
@@ -1093,7 +1105,7 @@ class Levels(commands.Cog, name="Levels"):
         await ctx.send(f"✅ Ab **Level {level}** gibt es {rolle.mention}.", allowed_mentions=discord.AllowedMentions.none())
 
     @commands.hybrid_command(name="levelrolle_entfernen", description="Level-Rolle löschen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def levelrolle_entfernen(self, ctx, level: int):
         if self.g(ctx.guild)["level_roles"].pop(str(level), None) is None:
             raise BotError("Für dieses Level gibt es keine Rolle.")
@@ -1101,14 +1113,14 @@ class Levels(commands.Cog, name="Levels"):
         await ctx.send("✅ Entfernt.")
 
     @commands.hybrid_command(name="levelsystem", description="Level-System an- oder ausschalten")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def levelsystem(self, ctx, status: Literal["an", "aus"]):
         self.g(ctx.guild)["levels_on"] = status == "an"
         self.store.save()
         await ctx.send(f"✅ Level-System: **{status}**")
 
     @commands.hybrid_command(name="xpsetzen", description="XP eines Mitglieds setzen")
-    @commands.has_permissions(administrator=True)
+    @only_owner()
     async def xpsetzen(self, ctx, mitglied: discord.Member, xp: commands.Range[int, 0, 10_000_000]):
         self.g(ctx.guild)["levels"][str(mitglied.id)] = {"xp": xp}
         self.store.save()
@@ -1415,7 +1427,7 @@ class Utility(commands.Cog, name="Utility"):
         e.add_field(name="⚙️ Setup (Admin)", inline=False, value=(
             "`!setwillkommen` `!setgoodbye` `!setlog` `!setautorolle` `!willkommentext` `!willkommentest`\n"
             "`!reaktionsrolle` `!call setup` `!einstellungen`\n"
-            "`!serveraufbau` – ⚠️ Server komplett neu aufbauen (nur Besitzer)"))
+            "`!serveraufbau` – ⚠️ Server komplett neu aufbauen (nur Bot-Besitzer)"))
         await ctx.send(embed=e)
 
     @commands.hybrid_command(name="ping", description="Latenz des Bots")
@@ -1759,12 +1771,12 @@ class Aufbau(commands.Cog, name="Aufbau"):
         self.running = set()
 
     @commands.hybrid_command(name="serveraufbau",
-                             description="⚠️ Löscht ALLES und baut den Server komplett neu auf (nur Besitzer)")
+                             description="⚠️ Löscht ALLES und baut den Server komplett neu auf (nur Bot-Besitzer)")
     @commands.bot_has_permissions(administrator=True)
     async def serveraufbau(self, ctx):
         guild = ctx.guild
-        if ctx.author.id != guild.owner_id:
-            raise BotError("Nur der **Serverbesitzer** darf das.")
+        if ctx.author.id != BOT_OWNER_ID:
+            raise BotError("Diesen Befehl darf nur der Bot-Besitzer benutzen. 🔒")
         if guild.id in self.running:
             raise BotError("Der Aufbau läuft bereits.")
         view = ConfirmView(ctx.author)
