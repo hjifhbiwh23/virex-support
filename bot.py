@@ -847,12 +847,12 @@ class Calls(commands.Cog, name="Calls"):
             raise BotError("Du bist in keinem Bot-Call.")
         ch = vs.channel
         owner = self.g(ctx.guild)["calls"][str(ch.id)]
-        ow = ch.overwrites_for(ctx.guild.default_role)
+        ow_ = ch.overwrites_for(ctx.guild.default_role)
         e = embed(f"📞 {ch.name}")
         e.add_field(name="Besitzer", value=f"<@{owner}>")
         e.add_field(name="Personen", value=f"{len(ch.members)}" + (f"/{ch.user_limit}" if ch.user_limit else ""))
-        e.add_field(name="Status", value="🔒 gesperrt" if ow.connect is False else "🔓 offen")
-        e.add_field(name="Sichtbar", value="nein" if ow.view_channel is False else "ja")
+        e.add_field(name="Status", value="🔒 gesperrt" if ow_.connect is False else "🔓 offen")
+        e.add_field(name="Sichtbar", value="nein" if ow_.view_channel is False else "ja")
         await ctx.send(embed=e)
 
 
@@ -1414,7 +1414,8 @@ class Utility(commands.Cog, name="Utility"):
             "`!umfrage` `!giveaway` `!erinnere` `!afk` `!sag` `!embed` `!ping` `!rechte` `!botinfo` `!serverinfo` `!userinfo` `!avatar`"))
         e.add_field(name="⚙️ Setup (Admin)", inline=False, value=(
             "`!setwillkommen` `!setgoodbye` `!setlog` `!setautorolle` `!willkommentext` `!willkommentest`\n"
-            "`!reaktionsrolle` `!call setup` `!einstellungen`"))
+            "`!reaktionsrolle` `!call setup` `!einstellungen`\n"
+            "`!serveraufbau` – ⚠️ Server komplett neu aufbauen (nur Besitzer)"))
         await ctx.send(embed=e)
 
     @commands.hybrid_command(name="ping", description="Latenz des Bots")
@@ -1663,7 +1664,365 @@ class Zeit(commands.Cog, name="Zeit"):
                        allowed_mentions=discord.AllowedMentions.none())
 
 
-COGS = [Server, Moderation, Calls, Tickets, Levels, Economy, Fun, Utility, Zeit]
+# ============================================================================
+# AUFBAU – löscht alles und baut den Server komplett neu auf (/serveraufbau)
+# ============================================================================
+def ow(**kw):
+    return discord.PermissionOverwrite(**kw)
+
+
+P = discord.Permissions
+MEMBER_PERMS = P(view_channel=True, send_messages=True, read_message_history=True, add_reactions=True,
+                 attach_files=True, embed_links=True, use_external_emojis=True, connect=True, speak=True,
+                 stream=True, use_voice_activation=True, change_nickname=True, use_application_commands=True,
+                 send_messages_in_threads=True, create_public_threads=True)
+MOD_PERMS = P(MEMBER_PERMS.value | P(kick_members=True, ban_members=True, moderate_members=True,
+                                      manage_messages=True, manage_nicknames=True, mute_members=True,
+                                      deafen_members=True, move_members=True, view_audit_log=True,
+                                      manage_threads=True).value)
+SUPPORT_PERMS = P(MEMBER_PERMS.value | P(manage_messages=True, move_members=True).value)
+ADMIN_PERMS = P(administrator=True)
+NONE_PERMS = P.none()
+
+# (key, name, farbe, rechte, hoist, erwähnbar)  –  von oben nach unten sortiert
+ROLE_SPEC = [
+    ("owner", "👑 Owner", 0xF1C40F, ADMIN_PERMS, True, False),
+    ("admin", "⚡ Admin", 0xE74C3C, ADMIN_PERMS, True, False),
+    ("mod", "🛡️ Moderator", 0x3498DB, MOD_PERMS, True, True),
+    ("support", "🎧 Supporter", 0x1ABC9C, SUPPORT_PERMS, True, True),
+    ("lvl25", "🏆 Schlumpf-Legende", 0xE67E22, NONE_PERMS, False, False),
+    ("lvl10", "🔥 Aktiver Schlumpf", 0xE91E63, NONE_PERMS, False, False),
+    ("lvl5", "🌱 Jungschlumpf", 0x2ECC71, NONE_PERMS, False, False),
+    ("g_fortnite", "🪂 Fortnite", 0x9B59B6, NONE_PERMS, False, True),
+    ("g_valorant", "🎯 Valorant", 0xFF4655, NONE_PERMS, False, True),
+    ("g_among", "🕵️ Among Us", 0xC51111, NONE_PERMS, False, True),
+    ("g_cs2", "💣 CS2", 0xF39C12, NONE_PERMS, False, True),
+    ("g_roblox", "🧱 Roblox", 0xE2231A, NONE_PERMS, False, True),
+    ("pings", "🔔 Pings", 0x95A5A6, NONE_PERMS, False, True),
+    ("mitglied", "💙 Schlumpf", 0x3BA7FF, MEMBER_PERMS, False, False),
+]
+REACTION_ROLES = [("🪂", "g_fortnite", "Fortnite"), ("🎯", "g_valorant", "Valorant"),
+                  ("🕵️", "g_among", "Among Us"), ("💣", "g_cs2", "Counter-Strike 2"),
+                  ("🧱", "g_roblox", "Roblox"), ("🔔", "pings", "Ankündigungen & Pings")]
+
+# Dauerhafte Spiel-Calls: (Name, Nutzerlimit)  – 0 = unbegrenzt
+GAME_CALLS = [
+    ("🪂 Fortnite 1", 4), ("🪂 Fortnite 2", 4), ("🪂 Fortnite 3", 4),
+    ("🎯 Valorant 1", 5), ("🎯 Valorant 2", 5),
+    ("🕵️ Among Us 1", 15), ("🕵️ Among Us 2", 15),
+    ("💣 Counter-Strike 2 | 1", 5), ("💣 Counter-Strike 2 | 2", 5),
+    ("🧱 Roblox 1", 0), ("🧱 Roblox 2", 0),
+    ("🏎️ Rennspiele", 0), ("⚽ Sport & Fifa", 0), ("🎲 Sonstige Spiele", 0),
+]
+
+RULES_TEXT = (
+    "**1️⃣ Respekt** – Sei freundlich. Beleidigungen, Mobbing und Hass sind verboten.\n"
+    "**2️⃣ Kein Spam** – Keine Floods, kein Capslock-Dauerfeuer, keine unnötigen Pings.\n"
+    "**3️⃣ Keine Werbung** – Keine Einladungen zu anderen Servern, kein ungefragtes Verlinken.\n"
+    "**4️⃣ Angemessene Inhalte** – Keine NSFW-, Gewalt- oder illegalen Inhalte.\n"
+    "**5️⃣ Richtiger Kanal** – Schreib Themen in die passenden Kanäle.\n"
+    "**6️⃣ Voice-Chat** – Keine Soundboards, kein Schreien, kein Stören. Du kannst deinen eigenen Call über **➕ Call erstellen** machen.\n"
+    "**7️⃣ Team-Entscheidungen** – Den Anweisungen von Moderatoren ist Folge zu leisten. Probleme klärst du im 🎫 Ticket.\n"
+    "**8️⃣ Discord-Regeln** – Die Discord-Nutzungsbedingungen gelten auch hier.\n\n"
+    "Wer sich nicht daran hält, wird verwarnt, stummgeschaltet oder gebannt. 💙"
+)
+
+
+class ConfirmView(discord.ui.View):
+    def __init__(self, user):
+        super().__init__(timeout=45)
+        self.user, self.ok = user, False
+
+    async def interaction_check(self, inter: discord.Interaction) -> bool:
+        if inter.user.id != self.user.id:
+            await inter.response.send_message("Das ist nicht dein Befehl.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Ja, ALLES löschen & neu bauen", emoji="💣", style=discord.ButtonStyle.danger)
+    async def yes(self, inter: discord.Interaction, button: discord.ui.Button):
+        self.ok = True
+        await inter.response.edit_message(content="⏳ Aufbau startet … Fortschritt siehst du in **#aufbau-status**.",
+                                          embed=None, view=None)
+        self.stop()
+
+    @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.secondary)
+    async def no(self, inter: discord.Interaction, button: discord.ui.Button):
+        await inter.response.edit_message(content="Abgebrochen. ✅", embed=None, view=None)
+        self.stop()
+
+
+class Aufbau(commands.Cog, name="Aufbau"):
+    def __init__(self, bot):
+        self.bot = bot
+        self.store = bot.store
+        self.running = set()
+
+    @commands.hybrid_command(name="serveraufbau",
+                             description="⚠️ Löscht ALLES und baut den Server komplett neu auf (nur Besitzer)")
+    @commands.bot_has_permissions(administrator=True)
+    async def serveraufbau(self, ctx):
+        guild = ctx.guild
+        if ctx.author.id != guild.owner_id:
+            raise BotError("Nur der **Serverbesitzer** darf das.")
+        if guild.id in self.running:
+            raise BotError("Der Aufbau läuft bereits.")
+        view = ConfirmView(ctx.author)
+        await ctx.send(embed=embed(
+            "⚠️ Kompletter Neuaufbau",
+            "Das löscht **ALLE Kanäle und ALLE Rollen** (außer Bot-Rollen) und baut danach alles neu:\n"
+            "Rollen, Kategorien, Kanäle, Berechtigungen, Willkommen/Verlassen, Regeln, Tickets, Calls, Logs, "
+            "Gaming, Reaktionsrollen.\n\n**Das kann nicht rückgängig gemacht werden!**", RED), view=view)
+        await view.wait()
+        if not view.ok:
+            return
+        self.running.add(guild.id)
+        try:
+            await self._build(ctx)
+        except Exception:
+            log.exception("Serveraufbau fehlgeschlagen")
+        finally:
+            self.running.discard(guild.id)
+
+    # ------------------------------------------------------------------
+    async def _build(self, ctx):
+        guild, owner = ctx.guild, ctx.author
+        everyone, me = guild.default_role, guild.me
+        humans = [m for m in guild.members if not m.bot]
+        mod_flags = ("kick_members", "ban_members", "manage_messages", "moderate_members")
+        admins = {m.id for m in humans if m.guild_permissions.administrator and m.id != owner.id}
+        mods = {m.id for m in humans if m.id not in admins and m.id != owner.id
+                and any(getattr(m.guild_permissions, p) for p in mod_flags)}
+
+        status = await guild.create_text_channel(
+            "aufbau-status", overwrites={everyone: ow(view_channel=False),
+                                         me: ow(view_channel=True, send_messages=True),
+                                         owner: ow(view_channel=True, send_messages=True)})
+
+        async def say(text):
+            try:
+                await status.send(text)
+            except discord.HTTPException:
+                pass
+
+        failed = []
+
+        # 1) Kanäle löschen
+        await say("🧹 Lösche alle Kanäle …")
+        for ch in list(guild.channels):
+            if ch.id == status.id:
+                continue
+            try:
+                await ch.delete(reason="Serveraufbau")
+            except discord.HTTPException:
+                failed.append(f"Kanal {ch.name}")
+
+        # 2) Rollen löschen
+        await say("🧹 Lösche alle Rollen …")
+        for role in list(guild.roles):
+            if role.is_default() or role.managed or role >= me.top_role:
+                continue
+            try:
+                await role.delete(reason="Serveraufbau")
+            except discord.HTTPException:
+                failed.append(f"Rolle {role.name}")
+
+        # 3) Rollen erstellen
+        await say("🎭 Erstelle Rollen …")
+        r = {}
+        for key, name, color, perms, hoist, mention in ROLE_SPEC:
+            r[key] = await guild.create_role(name=name, colour=discord.Colour(color), permissions=perms,
+                                             hoist=hoist, mentionable=mention, reason="Serveraufbau")
+        n = len(ROLE_SPEC)
+        try:
+            await guild.edit_role_positions({r[k[0]]: n - i for i, k in enumerate(ROLE_SPEC)})
+        except Exception:
+            for i, k in enumerate(ROLE_SPEC):
+                try:
+                    await r[k[0]].edit(position=n - i)
+                except discord.HTTPException:
+                    pass
+        try:
+            await everyone.edit(permissions=P(view_channel=True, read_message_history=True),
+                                reason="Serveraufbau")
+        except discord.HTTPException:
+            failed.append("@everyone-Rechte")
+
+        mitg, mod, sup, adm, own = r["mitglied"], r["mod"], r["support"], r["admin"], r["owner"]
+
+        # 4) Berechtigungs-Vorlagen
+        def p_info(reactions=False):
+            d = {everyone: ow(view_channel=True, send_messages=False, add_reactions=False,
+                              create_public_threads=False, create_private_threads=False),
+                 mod: ow(send_messages=True)}
+            if reactions:
+                d[mitg] = ow(add_reactions=True)
+            return d
+
+        def p_member():
+            return {everyone: ow(view_channel=False), mitg: ow(view_channel=True)}
+
+        def p_readonly():
+            return {everyone: ow(view_channel=False, send_messages=False), mitg: ow(view_channel=True),
+                    mod: ow(send_messages=True)}
+
+        def p_staff(with_support=False):
+            d = {everyone: ow(view_channel=False), mod: ow(view_channel=True), adm: ow(view_channel=True),
+                 own: ow(view_channel=True)}
+            if with_support:
+                d[sup] = ow(view_channel=True)
+            return d
+
+        def p_admin():
+            return {everyone: ow(view_channel=False), adm: ow(view_channel=True), own: ow(view_channel=True)}
+
+        def p_voice():
+            return {everyone: ow(view_channel=False, connect=False),
+                    mitg: ow(view_channel=True, connect=True, speak=True, stream=True),
+                    mod: ow(move_members=True, mute_members=True, deafen_members=True)}
+
+        def p_staff_voice():
+            d = p_staff(with_support=True)
+            d[everyone] = ow(view_channel=False, connect=False)
+            for role in (mod, sup, adm, own):
+                d[role] = ow(view_channel=True, connect=True, speak=True)
+            return d
+
+        async def cat(name, perms):
+            return await guild.create_category(name, overwrites=perms)
+
+        async def txt(name, category, topic, perms):
+            return await guild.create_text_channel(name, category=category, topic=topic, overwrites=perms)
+
+        async def vc(name, category, perms, limit=0):
+            return await guild.create_voice_channel(name, category=category, overwrites=perms, user_limit=limit)
+
+        # 5) Kanäle erstellen
+        await say("📁 Erstelle Kategorien und Kanäle …")
+        c = await cat("📢 ┃ INFO", p_info())
+        ch_welcome = await txt("👋│willkommen", c, "Willkommen auf dem Server!", p_info())
+        ch_rules = await txt("📜│regeln", c, "Bitte lies die Regeln.", p_info())
+        ch_news = await txt("📣│ankündigungen", c, "Wichtige Neuigkeiten.", p_info())
+        ch_roles = await txt("🎭│rollen", c, "Hole dir deine Rollen per Reaktion.", p_info(reactions=True))
+        ch_bye = await txt("🚪│verlassen", c, "Wer uns verlassen hat.", p_info())
+        ch_gw = await txt("🎉│giveaways", c, "Gewinnspiele.", p_info(reactions=True))
+
+        c = await cat("💬 ┃ COMMUNITY", p_member())
+        await txt("💬│chat", c, "Der Haupt-Chat.", p_member())
+        await txt("📸│medien", c, "Bilder und Clips.", p_member())
+        await txt("😂│memes", c, "Die besten Memes.", p_member())
+        await txt("💡│vorschläge", c, "Deine Ideen für den Server.", p_member())
+        await txt("🤖│bot-befehle", c, "Hier darfst du Bot-Befehle nutzen (!hilfe).", p_member())
+        await txt("🎰│casino", c, "Schlumpfbeeren verzocken (!zocken).", p_member())
+
+        c = await cat("🎮 ┃ GAMING", p_member())
+        await txt("🎮│gaming-chat", c, "Allgemein übers Zocken.", p_member())
+        await txt("🪂│fortnite", c, "Fortnite", p_member())
+        await txt("🎯│valorant", c, "Valorant", p_member())
+        await txt("🕵️│among-us", c, "Among Us", p_member())
+        await txt("💣│counter-strike", c, "Counter-Strike 2", p_member())
+        await txt("🧱│roblox", c, "Roblox", p_member())
+        await txt("🔎│mitspieler-suche", c, "Finde Leute zum Zocken.", p_member())
+
+        # Dauerhafte Calls (werden NICHT automatisch gelöscht)
+        c = await cat("🔊 ┃ SPRACHE", p_voice())
+        await vc("🛋️ Lounge 1", c, p_voice())
+        await vc("🛋️ Lounge 2", c, p_voice())
+        await vc("💬 Talk", c, p_voice())
+        await vc("🎵 Musik", c, p_voice())
+        await vc("📺 Stream-Room", c, p_voice())
+        afk = await vc("😴 AFK", c, p_voice())
+
+        c = await cat("🎮 ┃ SPIEL-CALLS", p_voice())
+        for name, limit in GAME_CALLS:
+            await vc(name, c, p_voice(), limit)
+
+        c_calls = await cat("📞 ┃ PRIVATE CALLS", p_voice())
+        hub = await vc("➕ Call erstellen", c_calls, p_voice())
+
+        c = await cat("🎫 ┃ SUPPORT", p_member())
+        ch_ticket = await txt("🎫│ticket-erstellen", c, "Brauchst du Hilfe? Öffne ein Ticket.", p_readonly())
+        c_tickets = await cat("📂 ┃ TICKETS", p_staff(with_support=True))
+
+        c = await cat("🛡️ ┃ TEAM", p_staff(with_support=True))
+        ch_team = await txt("💬│team-chat", c, "Interner Team-Chat.", p_staff(with_support=True))
+        ch_modlog = await txt("📋│mod-log", c, "Moderations- und Server-Logs.", p_staff())
+        ch_ticketlog = await txt("🗂️│ticket-logs", c, "Ticket-Transkripte.", p_staff())
+        await txt("📌│team-notizen", c, "Notizen fürs Team.", p_staff())
+        await vc("🔊 Team-Talk", c, p_staff_voice())
+
+        c = await cat("🔒 ┃ ADMIN", p_admin())
+        await txt("🔒│admin-chat", c, "Nur für Admins.", p_admin())
+        await txt("⚙️│bot-setup", c, "Bot-Einstellungen (!einstellungen).", p_admin())
+
+        # 6) Inhalte
+        await say("📝 Schreibe Regeln, Panels und Reaktionsrollen …")
+        await ch_rules.send(embed=embed("📜 Serverregeln", RULES_TEXT))
+        await ch_news.send(embed=embed("📣 Ankündigungen", f"Hier erfährst du alles Wichtige über **{SERVER_NAME}**. 💙"))
+        await ch_gw.send(embed=embed("🎉 Giveaways", "Hier starten Giveaways. Reagiere mit 🎉 zum Mitmachen!"))
+        await ch_ticket.send(embed=embed("🎫 Support", "Du brauchst Hilfe oder hast eine Frage?\n"
+                                         "Klicke unten auf den Button, um ein Ticket zu öffnen."),
+                             view=TicketPanel())
+
+        rr = {}
+        lines = [f"{em} → {r[k].mention} ({label})" for em, k, label in REACTION_ROLES]
+        msg = await ch_roles.send(embed=embed(
+            "🎭 Rollen", "Reagiere, um eine Rolle zu bekommen (nochmal klicken = entfernen):\n\n" + "\n".join(lines)))
+        for em, k, _ in REACTION_ROLES:
+            await msg.add_reaction(em)
+            rr[f"{msg.id}:{em}"] = r[k].id
+
+        # 7) Bot-Einstellungen speichern
+        g = self.store.guild(guild.id)
+        g.update({
+            "welcome_channel": ch_welcome.id, "goodbye_channel": ch_bye.id, "log_channel": ch_modlog.id,
+            "auto_role": mitg.id, "welcome_text": None,
+            "call_hub": hub.id, "calls": {},
+            "ticket_category": c_tickets.id, "ticket_role": sup.id, "ticket_log": ch_ticketlog.id,
+            "levels_on": True, "level_roles": {"5": r["lvl5"].id, "10": r["lvl10"].id, "25": r["lvl25"].id},
+            "reaction_roles": rr, "giveaways": {}, "afk": {},
+        })
+        for k in ("einladungen", "spam", "erwaehnungen", "woerter"):
+            g["automod"][k] = True
+        self.store.save()
+
+        try:
+            await guild.edit(afk_channel=afk, afk_timeout=300, system_channel=None, reason="Serveraufbau")
+        except discord.HTTPException:
+            failed.append("AFK-/System-Kanal (Community-Server?)")
+
+        # 8) Rollen an Mitglieder verteilen
+        await say(f"👥 Vergebe Rollen an {len(humans)} Mitglieder …")
+        for m in humans:
+            keys = [mitg]
+            if m.id == owner.id:
+                keys.append(own)
+            elif m.id in admins:
+                keys.append(adm)
+            elif m.id in mods:
+                keys.append(mod)
+            try:
+                await m.add_roles(*keys, reason="Serveraufbau")
+            except discord.HTTPException:
+                failed.append(f"Rollen für {m}")
+            await asyncio.sleep(0.4)
+
+        # 9) Fertig
+        text = ("✅ **Der Server wurde komplett neu aufgebaut!**\n\n"
+                "• Alle Mitglieder haben **💙 Schlumpf**, bisherige Admins/Mods ihre Team-Rolle.\n"
+                "• Dauerhafte Spiel-Calls in **🎮 ┃ SPIEL-CALLS**, private Calls über **➕ Call erstellen**.\n"
+                "• Tickets: **🎫│ticket-erstellen**. Level-Rollen bei Level 5 / 10 / 25, Reaktionsrollen in **🎭│rollen**.\n"
+                "• Willkommen, Verlassen, Mod-Log und Ticket-Logs sind schon eingestellt.")
+        if failed:
+            text += "\n\n⚠️ Das hat nicht geklappt:\n" + "\n".join(f"- {f}" for f in failed[:15])
+        await ch_team.send(f"{owner.mention}\n{text}")
+        try:
+            await status.delete(reason="Aufbau fertig")
+        except discord.HTTPException:
+            pass
+
+
+COGS = [Server, Moderation, Calls, Tickets, Levels, Economy, Fun, Utility, Zeit, Aufbau]
 
 
 # ============================================================================
